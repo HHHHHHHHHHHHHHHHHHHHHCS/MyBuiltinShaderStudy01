@@ -3,6 +3,42 @@
 	
 	#include "CGIncludes/UnityStandardUtils.cginc"
 	
+	
+	//---------------------------------------
+	half4       _Color;
+	half        _Cutoff;
+	
+	sampler2D   _MainTex;
+	float4      _MainTex_ST;
+	
+	sampler2D   _DetailAlbedoMap;
+	float4      _DetailAlbedoMap_ST;
+	
+	sampler2D   _BumpMap;
+	half        _BumpScale;
+	
+	sampler2D   _DetailMask;
+	sampler2D   _DetailNormalMap;
+	half        _DetailNormalMapScale;
+	
+	sampler2D   _SpecGlossMap;
+	sampler2D   _MetallicGlossMap;
+	half        _Metallic;
+	float       _Glossiness;
+	float       _GlossMapScale;
+	
+	sampler2D   _OcclusionMap;
+	half        _OcclusionStrength;
+	
+	sampler2D   _ParallaxMap;
+	half        _Parallax;
+	half        _UVSec;
+	
+	half4       _EmissionColor;
+	sampler2D   _EmissionMap;
+	
+	//-------------------------------------------------------------------------------------
+	
 	struct VertexInput
 	{
 		float4 vertex: POSITION;
@@ -16,7 +52,71 @@
 			half4 tangent: TANGENT;
 		#endif
 		
+		// UnityInstancing.cginc    uint instanceID : SV_InstanceID;
 		UNITY_VERTEX_INPUT_INSTANCE_ID
 	};
+	
+	float4 TexCoords(VertexInput v)
+	{
+		float4 texcoord;
+		texcoord.xy = TRANSFORM_TEX(v.uv0, _MainTex); // Always source from uv0
+		texcoord.zw = TRANSFORM_TEX(((_UVSec == 0) ? v.uv0: v.uv1), _DetailAlbedoMap);
+		return texcoord;
+	}
+	
+	half Alpha(float2 uv)
+	{
+		#if defined(_SMOOTHNESS_TEXTURE_ALBEDO_CHANNEL_A)
+			return _Color.a;
+		#else
+			return tex2D(_MainTex, uv).a * _Color.a;
+		#endif
+	}
+	
+	half2 MetallicGloss(float2 uv)
+	{
+		half2 mg;
+		
+		#ifdef _METALLICGLOSSMAP
+			#ifdef _SMOOTHNESS_TEXTURE_ALBEDO_CHANNEL_A
+				mg.r = tex2D(_MetallicGlossMap, uv).r;
+				mg.g = tex2D(_MainTex, uv).a;
+			#else
+				mg = tex2D(_MatallicGlossMap, uv).ra;
+			#endif
+			mg.g *= _GlossMapScale;
+		#else
+			mg.r = _Metallic;
+			#ifdef _SMOOTHNESS_TEXTURE_ALBEDO_CHANNEL_A
+				mg.g = tex2D(_MainTex, uv).a * _GlossMapScale;
+			#else
+				mg.g = _Glossiness;
+			#endif
+		#endif
+		
+		return mg;
+	}
+	
+	#ifdef _NORMALMAP
+		half3 NormalInTangentSpace(float4 texcoords)
+		{
+			//TODO:
+			half3 normalTangent = UnpackScaleNormal(tex2D(_BumpMap, texcoords.xy), _BumpScale);
+			
+			#if _DETAIL && defined(UNITY_ENABLE_DETAIL_NORMALMAP)
+				half mask = DetailMask(texcoords.xy);
+				half3 detailNormalTangent = UnpackScaleNormal(tex2D(_DetailNormalMap, texcoords.zw), _DetailNormalMapScale);
+				
+				#if _DETAIL_LERP
+					normalTangent = lerp(normalTangent, detailNormalTangent, mask);
+				#else
+					normalTangent = lerp(normalTangent, BlendNormals(normalTangent, detailNormalTangent), mask);
+				#endif
+			#endif
+			
+			return normalTangent;
+		}
+		
+	#endif
 	
 #endif // UNITY_STANDARD_INPUT_INCLUDED

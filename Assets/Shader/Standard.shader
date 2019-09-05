@@ -44,6 +44,7 @@
 	}
 	
 	CGINCLUDE
+	//决定用 SpecularSetup 还是 MetallicSetup
 	#define UNITY_SETUP_BRDF_INPUT MetallicSetup
 	ENDCG
 	
@@ -63,10 +64,11 @@
 			ZWrite[_ZWrite]
 			
 			CGPROGRAM
-
-			#define UNITY_NO_FULL_STANDARD_SHADER
 			
 			#pragma target 3.0
+			
+			//这个宏是使用低效果,高性能的效果
+			#define UNITY_NO_FULL_STANDARD_SHADER
 			
 			#pragma shader_feature _NORMALMAP
 			//最多声明256个全局 其中一个技巧是使用 _   代表不用A和A
@@ -88,7 +90,7 @@
 			#pragma multi_compile_instancing
 			
 			// 取消对以下行的注释以启用抖动LOD交叉淡入淡出。注意：对于其他传递，文件中还有更多要取消注释的内容。
-			//#pragma multi_compile _ LOD_FADE_CROSSFADE
+			//#pragma multi_compile _  LOD_FADE_CROSSFADE
 			
 			#pragma vertex vertBase
 			#pragma fragment fragBase

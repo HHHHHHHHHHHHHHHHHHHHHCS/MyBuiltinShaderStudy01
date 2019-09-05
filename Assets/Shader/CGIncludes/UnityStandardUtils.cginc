@@ -4,6 +4,65 @@
 	#include "CGIncludes/UnityCG.cginc"
 	#include "UnityStandardConfig.cginc"
 	
+	//计算反射度 高光反射的 r/g/b 最大值
+	half SpecularStrength(half3 specular)
+	{
+		#if (SHADER_TARGET < 30)
+			//SM2.0 因为指令计数限制 所以简化了通道    制作贴图时正常都是用R通道
+			return specular.r;
+		#else
+			return max(max(specular.r, specular.g), specular.b);
+		#endif
+	}
+	
+	//计算反射度 跟 1-金属度 近似
+	inline half OneMinusReflectivityFromMetallic(half metallic)
+	{
+		// We'll need oneMinusReflectivity, so
+		//   1-reflectivity = 1-lerp(dielectricSpec, 1, metallic) = lerp(1-dielectricSpec, 0, metallic)
+		// store (1-dielectricSpec) in unity_ColorSpaceDielectricSpec.a, then
+		//   1-reflectivity = lerp(alpha, 0, metallic) = alpha + metallic*(0 - alpha) =
+		//                  = alpha - metallic * alpha
+		half oneMinusDielectricSpec = unity_ColorSpaceDielectricSpec.a;
+		return oneMinusDielectricSpec - metallic * oneMinusDielectricSpec;
+	}
+	
+	//根据金属度得到满反射和高光反射的颜色
+	inline half3 DiffuseAndSpecularFromMetallic(half3 alebdo, half metallic, out half3 specColor, out half oneMinusReflectivity)
+	{
+		specColor = lerp(unity_ColorSpaceDielectricSpec.rgb, alebdo, metallic);
+		oneMinusReflectivity = OneMinusReflectivityFromMetallic(metallic);
+		return alebdo * oneMinusReflectivity;
+	}
+	
+	//预乘Alpha
+	inline half3 PreMultiplyAlpha(half3 diffColor, half alpha, half oneMinusReflectivity, out half outModifiedAlpha)
+	{
+		#if defined(_ALPHAPREMULTIPLY_ON)
+			//注意：着色器依赖于预乘alpha混合(_srcblund=one,_dstblund=oneminussrcalpha)
+			//从漫反射组件中“移除”透明度
+			diffColor *= alpha;
+			
+			#if (SHADER_TARGET < 30)
+				//SM2.0:指令计数限制  所以使用为修改的Alpha
+				//但是会牺牲部分基于物理的透明度,因为反射率的大小会影响透明度
+				outModifiedAlpha = alpha;
+			#else
+				//reflectivity“移除”其他组件，包括透明度
+				// outAlpha = 1-(1-alpha)*(1-reflectivity) =
+				//			= 1-(1 - reflectivity - alpha + alpha*reflectivity) =
+				//			= 1-((1 - reflectivity) - alpha * (1 - reflectivity)) =
+				//			= 1-(oneMinusReflectivity - alpha*oneMinusReflectivity) =
+				//			= 1-oneMinusReflectivity + alpha*oneMinusReflectivity
+				outModifiedAlpha = 1 - oneMinusReflectivity + alpha * oneMinusReflectivity;
+			#endif
+		#else
+			outModifiedAlpha = alpha;
+		#endif
+		
+		return diffColor;
+	}
+	
 	//计算球谐光
 	half3 ShadeSHPerVertex(half3 normal, half3 ambient)
 	{
@@ -13,14 +72,13 @@
 			//完全按照顶点计算
 			ambient += max(half3(0, 0, 0), ShadeSH9(half4(normal, 1.0)));
 		#else
-			// L2 per-vertex, L0..L1 & gamma-correction per-pixel
-			
-			// NOTE: SH data is always in Linear AND calculation is split between vertex & pixel
-			// Convert ambient to Linear and do final gamma-correction at the end (per-pixel)
+			//注意：sh数据始终是线性的，计算在顶点和像素之间分割
+			//将环境光转换为线性，并在最后进行最终伽马校正(每像素)
 			#ifdef UNITY_COLORSPACE_GAMMA
-				ambient = GammaToLinearSpace(ambient);//TODO:
+				ambient = GammaToLinearSpace(ambient);
 			#endif
-			ambient += SHEvalLinearL2(half4(normal, 1.0));     // no max since this is only L2 contribution
+			//L2的贡献是叠加
+			ambient += SHEvalLinearL2(half4(normal, 1.0));
 		#endif
 		
 		return ambient;

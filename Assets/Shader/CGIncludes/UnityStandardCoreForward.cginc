@@ -15,21 +15,24 @@
 			return vertForwardBaseSimple(v);
 		}
 		
+		/*
 		VertexOutputForwardAddSimple vertAdd(VertexInput v)
 		{
 			return vertForwardAddSimple(v);
 		}
-		
-		half4 fragBase(vertexOutputBaseSimple i): SV_TARGET
+		*/
+
+		half4 fragBase(VertexOutputBaseSimple i): SV_TARGET
 		{
 			return fragForwardBaseSimpleInternal(i);
 		}
 		
+		/*
 		half4 fragAdd(VertexOutputForwardAddSimple i): SV_TARGET
 		{
 			return fragForwardAddSimpleInternal(i);
 		}
-		
+		*/
 	#else
 		#include "UnityStandardCore.cginc"
 		VertexOutputForwardBase vertBase(VertexInput v)

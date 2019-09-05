@@ -3,6 +3,7 @@
 	
 	#include "CGIncludes/UnityStandardCore.cginc"
 	
+	
 	//不支持 : _PARALLAXMAP, DIRLIGHTMAP_COMBINED
 	#define GLOSSMAP (defined(_SPECGLOSSMAP) || defined(_METALLICGLOSSMAP))
 	
@@ -13,7 +14,10 @@
 	
 	#define JOIN2(a, b) a##b
 	#define JOIN(a, b) JOIN2(a, b)
+	//UNITY_SETUP_BRDF_INPUT -> MetallicSetup    MetallicSetup_Reflectivity
 	#define UNIFORM_REFLECTIVITY JOIN(UNITY_SETUP_BRDF_INPUT, _Reflectivity)
+	
+	
 	
 	struct VertexOutputBaseSimple
 	{
@@ -37,6 +41,7 @@
 			#endif
 		#endif
 		
+		//Unity在片元需要世界位置
 		#if UNITY_REQUIRE_FRAG_WORLDPOS
 			float3 posWorld: TEXCOORD8;//顶点世界空间位置
 		#endif
@@ -44,6 +49,44 @@
 		UNITY_VERTEX_OUTPUT_STEREO//合批处理用
 	};
 	
+	//计算金属度反射
+	half MetallicSetup_Reflectivity()
+	{
+		return 1.0h - OneMinusReflectivityFromMetallic(_Metallic);
+	}
+	
+	//计算高光反射度
+	half SpecularSetup_Reflectivity()
+	{
+		//_SpecColor 是Unity 自带的
+		return SpecularStrength(_SpecColor.rgb);
+	}
+	
+	FragmentCommonData FragmentSetupSimple(VertexOutputBaseSimple i)
+	{
+		half alpha = Alpha(i.tex.xy);
+		#if defined(_ALPHATEST_ON)
+			clip(alpha - _Cutoff);
+		#endif
+		
+		FragmentCommonData s = UNITY_SETUP_BRDF_INPUT(i.tex);
+		
+		//注意：着色器依赖于预乘alpha混合(_srcblund=one，_dstblund=oneminussrcalpha)
+		s.diffColor = PreMultiplyAlpha(s.diffColor, alpha, s.oneMinusReflectivity, /*out*/ s.alpha);
+		
+		s.normalWorld = i.normalWorld.xyz;
+		s.eyeVec = i.eyeVec.xyz;
+		s.posWorld = IN_WORLDPOS(i);
+		s.reflUVW = i.fogCoord.yzw;
+		
+		#ifdef _NORMALAMP
+			s.tangentSpaceNormal = NormalInTangentSpace(i.tex);//TODO:
+		#else
+			s.tangentSpaceNormal = 0;
+		#endif
+		//TODO:
+		return s;
+	}
 	
 	#ifdef _NORMALMAP
 		
@@ -73,7 +116,7 @@
 		
 	#endif // _NORMALMAP
 	
-	VertexOutputBaseSimple vertexForwardBaseSimple(VertexInput v)
+	VertexOutputBaseSimple vertForwardBaseSimple(VertexInput v)
 	{
 		UNITY_SETUP_INSTANCE_ID(v);
 		VertexOutputBaseSimple o;
@@ -109,12 +152,20 @@
 		
 		o.normalWorld.w = Pow4(1 - saturate(dot(normalWorld, -eyeVec)));//菲尼尔用
 		#if !GLOSSMAP
-		//UNIFORM_REFLECTIVITY() = UNITY_SETUP_BRDF_INPUT_Reflectivity
-			o.eyeVec.w = saturate(_Glossiness + UNIFORM_REFLECTIVITY());//TODO:
+			//UNIFORM_REFLECTIVITY() = MetallicSetup_Reflectivity()
+			o.eyeVec.w = saturate(_Glossiness + UNIFORM_REFLECTIVITY());
 		#endif
 		
 		UNITY_TRANSFER_FOG(o, o.pos);
 		return o;
+	}
+	
+	half4 fragForwardBaseSimpleInternal(VertexOutputBaseSimple i)
+	{
+		UNITY_APPLY_DITHER_CROSSFADE(i.pos.xy);
+		
+		FragmentCommonData s = UNITY_SETUP_BRDF_INPUT(i_tex);
+		return 0;
 	}
 	
 	
