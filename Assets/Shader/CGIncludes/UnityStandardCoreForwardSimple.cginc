@@ -69,6 +69,7 @@
 			clip(alpha - _Cutoff);
 		#endif
 		
+		//MetallicSetup
 		FragmentCommonData s = UNITY_SETUP_BRDF_INPUT(i.tex);
 		
 		//注意：着色器依赖于预乘alpha混合(_srcblund=one，_dstblund=oneminussrcalpha)
@@ -80,11 +81,11 @@
 		s.reflUVW = i.fogCoord.yzw;
 		
 		#ifdef _NORMALAMP
-			s.tangentSpaceNormal = NormalInTangentSpace(i.tex);//TODO:
+			s.tangentSpaceNormal = NormalInTangentSpace(i.tex);
 		#else
 			s.tangentSpaceNormal = 0;
 		#endif
-		//TODO:
+		
 		return s;
 	}
 	
@@ -115,6 +116,12 @@
 		}
 		
 	#endif // _NORMALMAP
+	
+	UnityLight MainLightSimple(VertexOutputBaseSimple i, FragmentCommonData s)
+	{
+		UnityLight mainLight = MainLight();
+		return mainLight;
+	}
 	
 	VertexOutputBaseSimple vertForwardBaseSimple(VertexInput v)
 	{
@@ -164,7 +171,23 @@
 	{
 		UNITY_APPLY_DITHER_CROSSFADE(i.pos.xy);
 		
-		FragmentCommonData s = UNITY_SETUP_BRDF_INPUT(i_tex);
+		FragmentCommonData s = FragmentSetupSimple(i);
+		
+		UnityLight mainLight = MainLightSimple(i, s);
+		
+		#if !defined(_LIGHTMAP_ON) && defined(_NORMALMAP)
+			//i.tangentSpaceLightDir(切线空间下) == mainLight.dir == _WolrdSpaceLightPos0.xyz
+			half ndotl = saturate(dot(s.tangentSpaceNormal, i.tangentSpaceLightDir));
+		#else
+			half ndotl = saturate(dot(s.normalWorld, mainLight.dir));
+		#endif
+		
+		//这里不能有worldpos(在sm 2.0上没有足够的插值器),所以在这种情况下不会有阴影褪色
+		//UnitySampleBakedOcclusion 是 烘焙的光照阴影遮挡  跟 ShadowMap 和 光照探针有关
+		half shadowMaskAttenuation = UnitySampleBakedOcclusion(i.ambientOrLightmapUV, 0);
+		//SHADOW_ATTENUATION 是阴影强度/衰减 0代表全黑的 
+		half realtimeShadowAttenuation = SHADOW_ATTENUATION(i);
+		//TODO:
 		return 0;
 	}
 	

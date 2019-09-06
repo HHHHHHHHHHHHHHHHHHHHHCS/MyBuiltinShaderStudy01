@@ -162,7 +162,7 @@
 	#endif
 	
 	#ifdef LOD_FADE_CROSSFADE
-		sampler2D unity_DitherMask;
+		sampler2D unity_DitherMask;//LOD Fade 遮罩贴图
 		
 		void UnityApplyDitherCrossFade(float2 vpos)
 		{

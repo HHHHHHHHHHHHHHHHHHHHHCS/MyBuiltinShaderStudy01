@@ -138,7 +138,7 @@
 	half4 unity_SHBb;
 	half4 unity_SHC;
 	
-	// part of Light because it can be used outside of shadow distance
+	// 部分的灯光,因为他可能在阴影距离之外使用
 	fixed4 unity_OcclusionMaskSelector;
 	fixed4 unity_ProbesOcclusion;
 	CBUFFER_END
@@ -157,6 +157,10 @@
 	float4 _LightSplitsNear;
 	float4 _LightSplitsFar;
 	float4x4 unity_WorldToShadow[4];
+	//_LightShadowData.x - 阴影强度
+	//_LightShadowData.y - 似乎未使用
+	//_LightShadowData.z - 1.0 / 阴影远距离
+	//_LightShadowData.w - 近距离阴影
 	half4 _LightShadowData;
 	float4 unity_ShadowFadeCenterAndType;
 	CBUFFER_END
@@ -166,7 +170,7 @@
 	CBUFFER_START(UnityPerDraw)
 	float4x4 unity_ObjectToWorld;
 	float4x4 unity_WorldToObject;
-	float4 unity_LODFade; // x is the fade value ranging within [0,1]. y is x quantized into 16 levels
+	float4 unity_LODFade; //x是在[0,1]范围内的淡入度值。y是x量化成16个能级
 	float4 unity_WorldTransformParams; // w is usually 1.0, or -1.0 for odd-negative scale transforms
 	float4 unity_RenderingLayer;
 	CBUFFER_END
@@ -306,13 +310,16 @@
 		UNITY_DECLARE_TEX3D_FLOAT(unity_ProbeVolumeSH);
 		
 		CBUFFER_START(UnityProbeVolume)
-		// x = Disabled(0)/Enabled(1)
-		// y = Computation are done in global space(0) or local space(1)
-		// z = Texel size on U texture coordinate
+		// x = 不启用0/启用1
+		// y = 在全局空间0/在局部空间1
+		// z = U坐标的TexelSize大小
 		float4 unity_ProbeVolumeParams;
 		
+		//光照探针 世界坐标 转 局部坐标 矩阵用
 		float4x4 unity_ProbeVolumeWorldToObject;
+		//1/光照探针尺寸
 		float3 unity_ProbeVolumeSizeInv;
+		//光照探针最小尺寸
 		float3 unity_ProbeVolumeMin;
 		CBUFFER_END
 	#endif

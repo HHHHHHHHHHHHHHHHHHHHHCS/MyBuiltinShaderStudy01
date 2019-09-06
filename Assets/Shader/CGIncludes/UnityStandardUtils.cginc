@@ -84,5 +84,39 @@
 		return ambient;
 	}
 	
+	half3 UnpackScalenormalRGorAG(half4 packednormal, half bumpScale)
+	{
+		#if defined(UNITY_NO_DXT5nm)
+			half3 normal = packednormal.xyz * - 1;
+			#if (SHADER_TARGET >= 30)
+				//SM2.0:因为指令计数器限制  所以normal scale 不支持
+				normal.xy *= bumpScale;
+			#endif
+			return normal;
+		#else
+			//DXT5 压缩了z 然后用 z = sqrt(1-(x*x+y*y))
+			//贴图格式规定 做欺骗用
+			packednormal	.x *= packednormal.w;
+			
+			half3 normal;
+			normal.xy = packednormal.xy * 2 - 1;
+			#if (SHADER_TARGET >= 30)
+				//SM2.0:因为指令计数器限制  所以normal scale 不支持
+				normal.xy *= bumpScale;
+			#endif
+			normal.z = sqrt(1.0 - saturate(dot(normal.xy, normal.xy)));
+			return normal;
+		#endif
+	}
+	
+	half3 UnpackScaleNormal(half4 packednormal, half bumpScale)
+	{
+		return UnpackScalenormalRGorAG(packednormal, bumpScale);
+	}
+	
+	half3 BlendNormals(half3 n1, half3 n2)
+	{
+		return normalize(half3(n1.xy + n2.xy, n1.z * n2.z));
+	}
 	
 #endif // UNITY_STANDARD_UTILS_INCLUDED

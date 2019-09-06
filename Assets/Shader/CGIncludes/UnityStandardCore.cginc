@@ -17,7 +17,7 @@
 		
 		//1-反射率 和 平滑度 主要用于DX9 SM2.0级别
 		//大部分的计算都在这些 (1-反射率)  的值 上完成 , 这就节省了宝贵的ALU插值
-		half oneminusReflectivity, smoothness;
+		half oneMinusReflectivity, smoothness;
 		float3 normalWorld;
 		float3 eyeVec;
 		half alpha;
@@ -31,6 +31,15 @@
 			half3 tangentSpaceNormal;
 		#endif
 	};
+	
+	UnityLight MainLight()
+	{
+		UnityLight l;
+		
+		l.color = _LightColor0.rgb;
+		l.dir = _WorldSpaceLightPos0.xyz;
+		return l;
+	}
 	
 	#if UNITY_REQUIRE_FRAG_WORLDPOS
 		#if UNITY_PACK_WORLDPOS_WITH_TANGENT

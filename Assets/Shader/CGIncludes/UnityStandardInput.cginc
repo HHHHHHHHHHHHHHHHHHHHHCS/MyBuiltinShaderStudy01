@@ -64,6 +64,21 @@
 		return texcoord;
 	}
 	
+	half3 Albedo(float4 texcoords)
+	{
+		half3 albedo = _Color.rgb * tex2D(_MainTex, texcoords.xy).rgb;
+		#if _DETAIL
+			#if (SHADER_TARGET < 30)
+				//SM2.0:因为指令计数器限制 所以没有细节mask
+				half mask = 1;
+				
+			#else
+			//TODO:
+				half mask = DetailMask(texcoords.xy);
+			#endif
+		#endif
+	}
+	
 	half Alpha(float2 uv)
 	{
 		#if defined(_SMOOTHNESS_TEXTURE_ALBEDO_CHANNEL_A)
@@ -97,14 +112,20 @@
 		return mg;
 	}
 	
+	//a是DetailNormal的mask
+	half DetailMask(float2 uv)
+	{
+		return tex2D(_DetailMask, uv).a;
+	}
+	
 	#ifdef _NORMALMAP
+		//切线空间的法线 xy是_BumpMap法线uv    zw是_DetailNormalMap法线uv
 		half3 NormalInTangentSpace(float4 texcoords)
 		{
-			//TODO:
 			half3 normalTangent = UnpackScaleNormal(tex2D(_BumpMap, texcoords.xy), _BumpScale);
 			
 			#if _DETAIL && defined(UNITY_ENABLE_DETAIL_NORMALMAP)
-				half mask = DetailMask(texcoords.xy);
+				half mask = DetailMask(texcoords.xy);//a是DetailNormal的mask
 				half3 detailNormalTangent = UnpackScaleNormal(tex2D(_DetailNormalMap, texcoords.zw), _DetailNormalMapScale);
 				
 				#if _DETAIL_LERP
