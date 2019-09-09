@@ -162,6 +162,7 @@
 	//_LightShadowData.z - 1.0 / 阴影远距离
 	//_LightShadowData.w - 近距离阴影
 	half4 _LightShadowData;
+	//_LightShadowData变量的Z和W组件包含了用于衰减的缩放和偏移量
 	float4 unity_ShadowFadeCenterAndType;
 	CBUFFER_END
 	
@@ -275,6 +276,7 @@
 	UNITY_DECLARE_TEXCUBE(unity_SpecCube0);
 	UNITY_DECLARE_TEXCUBE_NOSAMPLER(unity_SpecCube1);
 	
+	//反射球的属性
 	CBUFFER_START(UnityReflectionProbes)
 	float4 unity_SpecCube0_BoxMax;
 	float4 unity_SpecCube0_BoxMin;

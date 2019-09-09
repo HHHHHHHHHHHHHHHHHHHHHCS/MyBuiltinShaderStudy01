@@ -23,19 +23,25 @@
 			//夹住坐标otherwize我们将在shb系数和探针遮挡（occ）信息之间泄漏
 			texCoord.x = max(texCoord.x * 0.25f + 0.75f, 0.75f + 0.5f * texelSizeX);
 			
-			//UNITY_SAMPLE_TEX3D_SAMPLER() => tex3D or tex.Sample
-			//unity_ProbeVolumeSH() => Texture3D or sampler3D_float ...
+			//UNITY_SAMPLE_TEX3D_SAMPLER() -> tex3D or tex.Sample
+			//unity_ProbeVolumeSH() -> Texture3D or sampler3D_float ...
 			return UNITY_SAMPLE_TEX3D_SAMPLER(unity_ProbeVolumeSH, unity_ProbeVolumeSH, texCoord);
 		}
 		
 	#endif //#if UNITY_LIGHT_PROBE_PROXY_VOLUME
 	
-	//得到烘焙的阴影遮罩
+	#define unityShadowCoord float
+	#define unityShadowCoord2 float2
+	#define unityShadowCoord3 float3
+	#define unityShadowCoord4 float4
+	#define unityShadowCoord4x4 float4x4
+	
+	//得到烘焙的阴影遮罩  只在 forward 使用
 	fixed UnitySampleBakedOcclusion(float2 lightmapUV, float3 worldPos)
 	{
 		#if defined(SHADOWS_SHADOWMASK)
 			#if defined(LIGHTMAP_ON)
-				//UNITY_SAMPLE_TEX2D() => tex2D or tex.Sample
+				//UNITY_SAMPLE_TEX2D() -> tex2D or tex.Sample
 				//rawOcclusionMask 阴影遮罩
 				fixed4 rawOcclusionMask = UNITY_SAMPLE_TEX2D(unity_ShadowMask, lightmapUV.xy);
 			#else
@@ -57,8 +63,8 @@
 			//在正向动态对象只能从lppv得到烘焙遮挡的情况下，光探头遮挡是在cpu上通过减弱光的颜色来实现的。
 			fixed atten = 1.0f;
 			#if defined(UNITY_INSTANCING_ENABLED) && defined(UNITY_USE_SHCOEFFS_ARRAYS)
-				//…除非我们正在进行实例化，并且衰减被压缩到SHC阵列的.W分量中。
 				atten = unity_SHC.w;
+				//…除非我们正在进行实例化，并且衰减被压缩到SHC阵列的.W分量中。
 			#endif
 			
 			#if UNITY_LIGHT_PROBE_PROXY_VOLUME && !defined(LIGHTMAP_ON) && !UNITY_STANDARD_SIMPLE
@@ -77,6 +83,25 @@
 	half    UnitySampleShadowmap_PCF5x5(float4 coord, float3 receiverPlaneDepthBias);   // 采样  shadowmap 基与 PCF 滤波 (5x5 kernel)
 	half    UnitySampleShadowmap_PCF3x3(float4 coord, float3 receiverPlaneDepthBias);   // 采样  shadowmap 基与 PCF 滤波 (3x3 kernel)
 	float3  UnityGetReceiverPlaneDepthBias(float3 shadowCoord, float biasbiasMultiply); // 接收平面深度偏差
+	
+	
+	// ------------------------------------------------------------------
+	// Shadow fade
+	// ------------------------------------------------------------------
+	
+	//根据阴影类型 计算到阴影中心的距离   或者是 Z深度
+	//返回在[0,1]之间
+	float UnityComputeShadowFadeDistance(float3 wpos, float z)
+	{
+		float sphereDist = distance(wpos, unity_ShadowFadeCenterAndType.xyz);
+		return lerp(z, sphereDist, unity_ShadowFadeCenterAndType.w);
+	}
+	
+	//得到根据 距离 得到  NearClip~FarClip区间 中的距离阴影
+	half UnityComputeShadowFade(float fadeDist)
+	{
+		return saturate(fadeDist * _LightShadowData.z + _LightShadowData.w);
+	}
 	
 	
 	// ------------------------------------------------------------------
@@ -278,7 +303,70 @@
 		return UnitySampleShadowmap_PCF3x3Tent(coord, receiverPlaneDepthBias);
 	}
 	
-	
+	// ------------------------------------------------------------------
+	// 正向渲染和延迟渲染都用  使用利用实时的阴影和烘焙的阴影计算出 最后要的阴影
+	half UnityMixRealtimeAndBakedShadows(half realtimeShadowAttenuation, half bakedShadowAttenuation, half fade)
+	{
+		// -- Static objects --
+		// FWD BASE PASS
+		// ShadowMask mode          = LIGHTMAP_ON + SHADOWS_SHADOWMASK + LIGHTMAP_SHADOW_MIXING
+		// Distance shadowmask mode = LIGHTMAP_ON + SHADOWS_SHADOWMASK
+		// Subtractive mode         = LIGHTMAP_ON + LIGHTMAP_SHADOW_MIXING
+		// Pure realtime direct lit = LIGHTMAP_ON
+		
+		// FWD ADD PASS
+		// ShadowMask mode          = SHADOWS_SHADOWMASK + LIGHTMAP_SHADOW_MIXING
+		// Distance shadowmask mode = SHADOWS_SHADOWMASK
+		// Pure realtime direct lit = LIGHTMAP_ON
+		
+		// DEFERRED LIGHTING PASS
+		// ShadowMask mode          = LIGHTMAP_ON + SHADOWS_SHADOWMASK + LIGHTMAP_SHADOW_MIXING
+		// Distance shadowmask mode = LIGHTMAP_ON + SHADOWS_SHADOWMASK
+		// Pure realtime direct lit = LIGHTMAP_ON
+		
+		// -- Dynamic objects --
+		// FWD BASE PASS + FWD ADD PASS
+		// ShadowMask mode          = LIGHTMAP_SHADOW_MIXING
+		// Distance shadowmask mode = N/A
+		// Subtractive mode         = LIGHTMAP_SHADOW_MIXING (only matter for LPPV. Light probes occlusion being done on CPU)
+		// Pure realtime direct lit = N/A
+		
+		// DEFERRED LIGHTING PASS
+		// ShadowMask mode          = SHADOWS_SHADOWMASK + LIGHTMAP_SHADOW_MIXING
+		// Distance shadowmask mode = SHADOWS_SHADOWMASK
+		// Pure realtime direct lit = N/A
+		
+		//Static objects
+		#if !defined(SHADOWS_DEPTH) && !defined(SHADOWS_SCREEN) && !defined(SHADOWS_CUBE)
+			#if defined(LIGHTMAP_ON) && defined(LIGHTMAP_SHADOW_MIXING) && !defined(SHADOWS_SHADOWMASK)
+					//在Subtractive mode下，如果没有阴影，我们会直接不用灯光贡献，使用光照贴图中的烘焙
+				return 0.0;
+			#else
+				//否则用烘焙的的阴影
+				return bakedShadowAttenuation;
+			#endif
+		#endif
+		
+		#if (SHADER_TARGET <= 20) || UNITY_STANDARD_SIMPLE
+			//SM2.0由于指令计数限制,没有衰减或者混合
+			#if defined(SHADOWS_SHADOWMASK) || defined(LIGHTMAP_SHADOW_MIXING)
+				return min(realtimeShadowAttenuation, bakedShadowAttenuation);
+			#else
+				return realtimeShadowAttenuation;
+			#endif
+		#endif
+		
+		//Dynamic objects
+		#if defined(LIGHTMAP_SHADOW_MIXING)
+			//Subtractive or shadowmask mode
+			realtimeShadowAttenuation = saturate(realtimeShadowAttenuation + fade);
+			return min(realtimeShadowAttenuation, bakedShadowAttenuation);
+		#endif
+		
+		//在“distance shadowmask”或“realtime shadow fadeout”中
+		//我们会向烘焙阴影发出警报（如果没有烘焙阴影，则烘焙阴影衰减将为1）
+		return lerp(realtimeShadowAttenuation, bakedShadowAttenuation, fade);
+	}
 	
 	// ------------------------------------------------------------------
 	// Spot light shadows
@@ -312,7 +400,7 @@
 				#if !defined(SHADOWS_NATIVE)
 					float3 coord = shadowCoord.xyz / shadowCoord.w;
 					float4 shadowVals;
-					//SAMPLE_DEPTH_TEXTURE() => tex2D(sampler,uv).r
+					//SAMPLE_DEPTH_TEXTURE() -> tex2D(sampler,uv).r
 					shadowVals.x = SAMPLE_DEPTH_TEXTURE(_ShadowMapTexture, coord + _ShadowOffsets[0].xy);
 					shadowVals.y = SAMPLE_DEPTH_TEXTURE(_ShadowMapTexture, coord + _ShadowOffsets[1].xy);
 					shadowVals.z = SAMPLE_DEPTH_TEXTURE(_ShadowMapTexture, coord + _ShadowOffsets[2].xy);
@@ -327,7 +415,7 @@
 					#if defined(SHADER_API_MOBILE)
 						float3 coord = shadowCoord.xyz / shadowCoord.w;
 						half4 shadows;
-						//UNITY_SAMPLE_SHADOW() => SAMPLE_DEPTH_TEXTURE (xy < zz) 然后把值进行比较 得出0或者1
+						//UNITY_SAMPLE_SHADOW() -> SAMPLE_DEPTH_TEXTURE (xy < zz) 然后把值进行比较 得出0或者1
 						shadows.x = UNITY_SAMPLE_SHADOW(_ShadowMapTexture, coord + _ShadowOffsets[0]);
 						shadows.y = UNITY_SAMPLE_SHADOW(_ShadowMapTexture, coord + _ShadowOffsets[1]);
 						shadows.z = UNITY_SAMPLE_SHADOW(_ShadowMapTexture, coord + _ShadowOffsets[2]);
@@ -336,7 +424,7 @@
 					#else
 						//任何别的设备
 						float3 coord = shadowCoord.xyz / shadowCoord.w;
-						//UnityGetReceiverPlaneDepthBias() => 平面深度偏差
+						//UnityGetReceiverPlaneDepthBias() -> 平面深度偏差
 						float3 receiverPlaneDepthBias = UnityGetReceiverPlaneDepthBias(coord, 1.0f);
 						//通过阴影贴图波滤得到阴影
 						shadow = UnitySampleShadowmap_PCF3x3(float4(coord, 1), receiverPlaneDepthBias);
@@ -346,12 +434,12 @@
 			#else
 				// 1-tap shadows
 				#if defined(SHADOWS_NATIVE)
-					//UNITY_SAMPLE_SHADOW_PROJ() => SAMPLE_DEPTH_TEXTURE_PROJ(xy) < z/w 进行比较返回 0 or 1
+					//UNITY_SAMPLE_SHADOW_PROJ() -> SAMPLE_DEPTH_TEXTURE_PROJ(xy) < z/w 进行比较返回 0 or 1
 					half shadow = UNITY_SAMPLE_SHADOW_PROJ(_ShadowMapTexture, shadowCoord);
 					shadow = lerp(_LightShadowData.r, 1.0f, shadow);
 				#else
 					//GLES 为了省性能 所以没有lerp
-					//UNITY_PROJ_COORD(x) => x
+					//UNITY_PROJ_COORD(x) -> x
 					half shadow = SAMPLE_DEPTH_TEXTURE_PROJ(_ShadowMapTexture, UNITY_PROJ_COORD(shadowCoord)) < (shadowCoord.z / shadowCoord.w) ? _LightShadowData.r: 1.0;
 				#endif
 				
@@ -361,5 +449,21 @@
 		}
 		
 	#endif // #if defined (SHADOWS_DEPTH) && defined (SPOT)
+	
+	
+	// ------------------------------------------------------------------
+	// Point light shadows
+	// ------------------------------------------------------------------
+	
+	#if defined(SHADOWS_CUBE)
+		
+		#if defined(SHADOWS_CUBE_IN_DEPTH_TEX)
+			//UNITY_DECLARE_TEXCUBE_SHADOWMAP -> samplerCUBE_float
+			UNITY_DECLARE_TEXCUBE_SHADOWMAP(_ShadowMapTexture);
+		#else
+			UNITY_DECLARE_TEXCUBE(_ShadowMapTexture);
+		#endif
+		
+	#endif // #if defined (SHADOWS_CUBE)
 	
 #endif // UNITY_BUILTIN_SHADOW_LIBRARY_INCLUDED

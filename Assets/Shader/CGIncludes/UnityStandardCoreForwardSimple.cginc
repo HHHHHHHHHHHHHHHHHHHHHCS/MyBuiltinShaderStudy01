@@ -17,7 +17,13 @@
 	//UNITY_SETUP_BRDF_INPUT -> MetallicSetup    MetallicSetup_Reflectivity
 	#define UNIFORM_REFLECTIVITY JOIN(UNITY_SETUP_BRDF_INPUT, _Reflectivity)
 	
-	
+	#if !SPECULAR_HIGHLIGHTS
+		#define REFLECTVEC_FOR_SPECULAR(i, s) half3(0, 0, 0)
+	#elif defined(_NORMALMAP)
+		#define REFLECTVEC_FOR_SPECULAR(i, s) reflect(i.tangentSpaceEyeVec, s.tangentSpaceNormal)
+	#else
+		#define REFLECTVEC_FOR_SPECULAR(i, s) s.reflUVW
+	#endif
 	
 	struct VertexOutputBaseSimple
 	{
@@ -60,6 +66,15 @@
 	{
 		//_SpecColor 是Unity 自带的
 		return SpecularStrength(_SpecColor.rgb);
+	}
+	
+	half3 LightDirForSpecular(VertexOutputBaseSimple i, UnityLight mainLight)
+	{
+		#if SPECULAR_HIGHLIGHTS && defined(_NORMALMAP)
+			return i.tangentSpaceLightDir;
+		#else
+			return mainLight.dir;
+		#endif
 	}
 	
 	FragmentCommonData FragmentSetupSimple(VertexOutputBaseSimple i)
@@ -163,6 +178,7 @@
 			o.eyeVec.w = saturate(_Glossiness + UNIFORM_REFLECTIVITY());
 		#endif
 		
+		//TODO:雾还没有做
 		UNITY_TRANSFER_FOG(o, o.pos);
 		return o;
 	}
@@ -183,11 +199,27 @@
 		#endif
 		
 		//这里不能有worldpos(在sm 2.0上没有足够的插值器),所以在这种情况下不会有阴影褪色
-		//UnitySampleBakedOcclusion 是 烘焙的光照阴影遮挡  跟 ShadowMap 和 光照探针有关
+		//UnitySampleBakedOcclusion 是 烘焙的光照阴影遮挡  跟 unity_ShadowMask 和 光照探针有关
 		half shadowMaskAttenuation = UnitySampleBakedOcclusion(i.ambientOrLightmapUV, 0);
-		//SHADOW_ATTENUATION 是阴影强度/衰减 0代表全黑的 
+		//SHADOW_ATTENUATION 是阴影强度(衰减) 0代表全黑的   跟shadowMap 有关
 		half realtimeShadowAttenuation = SHADOW_ATTENUATION(i);
-		//TODO:
+		//根据实时的阴影和烘焙的阴影  算出要的阴影
+		half atten = UnityMixRealtimeAndBakedShadows(realtimeShadowAttenuation, shadowMsakAttenuation, 0);
+		
+		//遮罩
+		half occlusion = Occlusion(i.tex.xy);
+		//dot(Refl(eyeView),lightDir)
+		half rl = dot(REFLECTVEC_FOR_SPECULAR(i, s), LightDirSpecular(i, mainLight));
+		
+		UnityGI gi = FragmentGI(s, occlusion, i.ambientOrLightmapUV, atten, mianLight);
+		half3 attenuatedLightColor = gi.light.color * ndotl;
+		
+		half3 c = BRDF3_Indirect(s.diffColor, s.specColor, gi.indirect, PerVertexGrazingTerm(i, s), PerVertexFresnelTerm(i));
+		c += BRDF3DirectSimple(s.diffColor, s.specColor, s.smoothness, rl) * attenuatedLightColor;
+		c += Emission(i.tex.xy);
+		
+		UNITY_APPLY_FOG(i.fogCoord, c);
+		
 		return 0;
 	}
 	

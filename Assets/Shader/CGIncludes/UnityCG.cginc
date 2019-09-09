@@ -13,6 +13,7 @@
 		#define unity_ColorSpaceDielectricSpec half4(0.04, 0.04, 0.04, 1.0 - 0.04) // standard dielectric reflectivity coef at incident angle (= 4%)
 	#endif
 	
+	
 	//linear颜色转gamma
 	inline half3 LinearToGammaSpace(half3 linRGB)
 	{
@@ -156,7 +157,7 @@
 			// 手机 或 SM2.0: 计算每个顶点的雾因子
 			#define UNITY_TRANSFER_FOG(o, outpos) UNITY_CALC_FOG_FACTOR((outpos).z); o.fogCoord.x = unityFogFactor
 		#else
-			// 电脑/主机 并且 SM3.0 :计算每个顶点的雾距离和每个像素的雾因子
+			// 电脑/主机 并且 SM3.0 :计算每个顶点的雾距离和每个像素的雾因子  其实就是屏幕空间的深度
 			#define UNITY_TRANSFER_FOG(o, outpos) o.fogCoord.x = (outpos).z
 		#endif
 	#else

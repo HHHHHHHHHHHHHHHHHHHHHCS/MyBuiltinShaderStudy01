@@ -13,6 +13,15 @@
 		return half3(oneMiusT, oneMiusT, oneMiusT) + b * t;
 	}
 	
+	//和1进行Lerp
+	half LerpOneTo(half b, half t)
+	{
+		half oneMinusT = 1 - t;
+		//look like:
+		// 1*(1-t)+b*t
+		return oneMinusT + b * t;
+	}
+	
 	//计算反射度 高光反射的 r/g/b 最大值
 	half SpecularStrength(half3 specular)
 	{

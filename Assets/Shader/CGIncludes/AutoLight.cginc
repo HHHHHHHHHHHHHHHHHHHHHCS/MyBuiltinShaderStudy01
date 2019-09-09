@@ -9,13 +9,35 @@
 	// ---- Screen space direction light shadows helpers (any version)
 	#if defined(SHADOWS_SCREEN)
 		#if defined(UNITY_NO_SCREENSPACE_SHADOWS)
+			UNITY_DECLARE_SHADOWMAP(_ShadowMapTexture);
 			#define TRANSFER_SHADOW(a) a._ShadowCoord = mul(unity_WorldToShadow[0], mul(unity_ObjectToWorld, v.vertex));
+			inline fixed unitySampleShadow(unityShadowCoord4 shadowCoord)
+			{
+				#if defined(SHADOWS_NATIVE)
+					//UNITY_SAMPLE_SHADOW() -> SAMPLE_DEPTH_TEXTURE (SAMPLE_DEPTH_TEXTURE(tex,xy) < z) ? 0.0 : 1.0
+					fixed shadow = UNITY_SAMPLE_SHADOW(_ShadowMapTexture, shadowCoord.xyz);
+					shadow = _LightShadowData.r + shadow * (1 - _LightShadowData.r);
+					return shadow;
+				#else
+					unityShadowCoord dist = SAMPLE_DEPTH_TEXTURE(_ShadowMapTexture, shadowCoord.xy);
+					unityShadowCoord lightShadowDataX = _LightShadowData.x;
+					//shadowCoord.z是阀值 大于某个就是阴影
+					unityShadowCoord threshold = shadowCoord.z;
+					return max(dist > threshold, lightShadowDataX);
+				#endif
+			}
 		#else
+			//UNITY_DECLARE_SCREENSPACE_SHADOWMAP -> sampler2D
+			UNITY_DECLARE_SCREENSPACE_SHADOWMAP(_ShadowMapTexture);
 			#define TRANSFER_SHADOW(a) a._ShadowCoord = ComputeScreenPos(a.pos);
+			inline fixed unitySampleShadow(unityShadowCoord4 shadowCoord)
+			{
+				//UNITY_SAMPLE_SCREEN_SHADOW() -> tex2Dproj( tex, UNITY_PROJ_COORD(uv) ).r
+				fixed shadow = UNITY_SAMPLE_SCREEN_SHADOW(_ShadowMapTexture, shadowCoord);
+				return shadow;
+			}
 		#endif
-		//TODO:
 		#define SHADOW_COORDS(idx1) unityShadowCoord4 _ShadowCoord: TEXCOORD##idx1;
-		//TODO:
 		#define SHADOW_ATTENUATION(a) unitySampleShadow(a._ShadowCoord)
 	#endif
 	

@@ -24,4 +24,9 @@
 		return x * x * x * x;
 	}
 	
+	float SmoothnessToPerceptualRoughness(float smoothness)
+	{
+		return 1 - smoothness;
+	}
+	
 #endif // UNITY_STANDARD_BRDF_INCLUDED

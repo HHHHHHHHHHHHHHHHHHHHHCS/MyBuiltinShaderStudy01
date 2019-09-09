@@ -64,16 +64,29 @@
 		return texcoord;
 	}
 	
+	//a是DetailNormal的mask
 	half DetailMask(float2 uv)
 	{
 		return tex2D(_DetailMask, uv).a;
+	}
+	
+	//遮罩
+	half Occlusion(float2 uv)
+	{
+		#if (SHADER_TARGET < 30)
+			//SM2.0 : 指令计数器限制   简化  没有lerp
+			return tex2D(_OcclusionMap, uv).g;
+		#else
+			half occ = tex2D(_OcclusionMap, uv).g;
+			return LerpOneTo(occ, _OcclusionStrength);
+		#endif
 	}
 	
 	half3 Albedo(float4 texcoords)
 	{
 		half3 albedo = _Color.rgb * tex2D(_MainTex, texcoords.xy).rgb;
 		#if _DETAIL
-			#if (SHADER_TARGET < 30)
+			#if(SHADER_TARGET < 30)
 				//SM2.0:因为指令计数器限制 所以没有细节mask
 				half mask = 1;
 			#else
@@ -124,12 +137,6 @@
 		#endif
 		
 		return mg;
-	}
-	
-	//a是DetailNormal的mask
-	half DetailMask(float2 uv)
-	{
-		return tex2D(_DetailMask, uv).a;
 	}
 	
 	#ifdef _NORMALMAP
