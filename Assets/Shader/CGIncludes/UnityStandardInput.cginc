@@ -64,6 +64,11 @@
 		return texcoord;
 	}
 	
+	half DetailMask(float2 uv)
+	{
+		return tex2D(_DetailMask, uv).a;
+	}
+	
 	half3 Albedo(float4 texcoords)
 	{
 		half3 albedo = _Color.rgb * tex2D(_MainTex, texcoords.xy).rgb;
@@ -71,12 +76,21 @@
 			#if (SHADER_TARGET < 30)
 				//SM2.0:因为指令计数器限制 所以没有细节mask
 				half mask = 1;
-				
 			#else
-			//TODO:
 				half mask = DetailMask(texcoords.xy);
 			#endif
+			half3 detailAlbedo = tex2D(_DetailAlbedoMap, texcoords.zw).rgb;
+			#if _DETAIL_MULX2
+				albedo *= LerpWhiteTo(detailAlbedo * unity_ColorSpaceDouble.rgb, mask);
+			#elif _DETAIL_MUL
+				albedo *= LerpWhiteTo(detailAlbedo, mask);
+			#elif _DETAIL_ADD
+				albedo += detailAlbedo * mask;
+			#elif _DETAIL_LERP
+				albedo = lerp(albeodo, detailAlbedo, mask);
+			#endif
 		#endif
+		return albedo;
 	}
 	
 	half Alpha(float2 uv)

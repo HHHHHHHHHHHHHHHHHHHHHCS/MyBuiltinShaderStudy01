@@ -4,6 +4,15 @@
 	#include "CGIncludes/UnityCG.cginc"
 	#include "UnityStandardConfig.cginc"
 	
+	//和白色进行Lerp
+	half3 LerpWhiteTo(half3 b, half t)
+	{
+		half oneMiusT = 1 - t;
+		//look like
+		//half3 temp = half3(1,1,1)*(1-t) + b*t;
+		return half3(oneMiusT, oneMiusT, oneMiusT) + b * t;
+	}
+	
 	//计算反射度 高光反射的 r/g/b 最大值
 	half SpecularStrength(half3 specular)
 	{

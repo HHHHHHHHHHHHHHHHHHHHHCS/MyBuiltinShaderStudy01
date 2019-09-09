@@ -3,11 +3,13 @@
 	
 	#include "CGIncludes/UnityInstancing.cginc"
 	#include "CGincludes/UnityShaderVariables.cginc"
-
+	
 	
 	#ifdef UNITY_COLORSPACE_GAMMA
+		#define unity_ColorSpaceDouble fixed4(2.0, 2.0, 2.0, 2.0)
 		#define unity_ColorSpaceDielectricSpec half4(0.220916301, 0.220916301, 0.220916301, 1.0 - 0.220916301)
 	#else // Linear values
+		#define unity_ColorSpaceDouble fixed4(4.59479380, 4.59479380, 4.59479380, 2.0)
 		#define unity_ColorSpaceDielectricSpec half4(0.04, 0.04, 0.04, 1.0 - 0.04) // standard dielectric reflectivity coef at incident angle (= 4%)
 	#endif
 	
