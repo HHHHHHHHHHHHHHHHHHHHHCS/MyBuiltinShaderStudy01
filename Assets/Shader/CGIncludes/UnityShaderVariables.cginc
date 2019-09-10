@@ -233,6 +233,7 @@
 		int unity_StereoEyeIndex;
 	#endif
 	
+	//阴影的颜色
 	fixed4 unity_ShadowColor;
 	CBUFFER_END
 	
@@ -309,19 +310,21 @@
 	#endif
 	
 	#if UNITY_LIGHT_PROBE_PROXY_VOLUME
+		//sampler3D_float -> 光照探针的球谐颜色3D贴图  
+		//UV  X:0->R  Y:0.25->G  B:0.5->B  A:0.75->occ(遮挡)
 		UNITY_DECLARE_TEX3D_FLOAT(unity_ProbeVolumeSH);
 		
 		CBUFFER_START(UnityProbeVolume)
 		// x = 不启用0/启用1
 		// y = 在全局空间0/在局部空间1
-		// z = U坐标的TexelSize大小
+		// z = U坐标的TexelSize大小,用做步长
 		float4 unity_ProbeVolumeParams;
 		
 		//光照探针 世界坐标 转 局部坐标 矩阵用
 		float4x4 unity_ProbeVolumeWorldToObject;
 		//1/光照探针尺寸
 		float3 unity_ProbeVolumeSizeInv;
-		//光照探针最小尺寸
+		//光照探针最小位置 类似于AABB 的 Min
 		float3 unity_ProbeVolumeMin;
 		CBUFFER_END
 	#endif

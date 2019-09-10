@@ -81,7 +81,7 @@
 		return diffColor;
 	}
 	
-	//计算球谐光
+	//计算球谐光----顶点状态
 	half3 ShadeSHPerVertex(half3 normal, half3 ambient)
 	{
 		#if UNITY_SAMPLE_FULL_SH_PER_PIXEL
@@ -97,6 +97,59 @@
 			#endif
 			//L2的贡献是叠加
 			ambient += SHEvalLinearL2(half4(normal, 1.0));
+		#endif
+		
+		return ambient;
+	}
+	
+	half3 ShadeSHPerPixel(half3 normal, half3 ambient, float3 worldPos)
+	{
+		half3 ambient_contrib = 0.0;
+		
+		//完全按照像素球谐
+		#if UNITY_SAMPLE_FULL_SH_PER_PIXEL
+			#if UNITY_LIGHT_PROBE_PROXY_VOLUME
+				//unity_ProbeVolumeParams.x == 1   启用了光照探针  则用探针的ambient
+				//否则用普通的ambient
+				if (unity_ProbeVolumeParams.x == 1.0)
+					ambient_contrib = SHEvalLinearL0L1_SampleProbeVolume(half4(normal, 1.0), worldPos);
+				else
+				ambient_contrib = SHEvalLinearL0L1(half4(normal, 1.0));
+			#else
+				ambient_contrib = SHEvalLinearL0L1(half4(normal, 1.0));
+			#endif
+			
+			//二级球谐
+			ambient_contrib += SHEvalLinearL2(half4(normal, 1.0));
+			
+			//避免颜色负数
+			ambient += max(half3(0, 0, 0), ambient_contrib);
+			
+			//颜色Gamma校对
+			#ifdef UNITY_COLORSPACE_GAMMA
+				ambient = LinearToGammaSpace(ambient);
+			#endif
+			
+		#else if (SHADER_TARGET < 30) || UNITY_STANDARD_SIMPLE
+			//完全逐顶点
+			//这里没什么事。从sh开始的环境光的gamma转换发生在顶点着色器中，请参见shadeshpervertex。
+		#else
+			#if UNITY_LIGHT_PROBE_PROXY_VOLUME
+				//unity_ProbeVolumeParams.x == 1   启用了光照探针
+				if (unity_ProbeVolumeParams.x == 1.0)
+					ambient_contrib = SHEvalLinearL0L1_SampleProbeVolume(half4(normal, 1.0), worldPos);
+				else
+				ambient_contrib = SHEvalLinearL0L1(half4(normal, 1.0));
+			#else
+				ambient_contrib = SHEvalLinearL0L1(half4(normal, 1.0));
+			#endif
+			
+			//因为已经在顶点中计算了L2的贡献  所以在像素中不用再加了
+			ambient = max(half3(0, 0, 0), ambient + ambient_contrib);
+			
+			#ifdef UNITY_COLORSPACE_GAMMA
+				ambient = LinearToGammaSpace(ambient);
+			#endif
 		#endif
 		
 		return ambient;

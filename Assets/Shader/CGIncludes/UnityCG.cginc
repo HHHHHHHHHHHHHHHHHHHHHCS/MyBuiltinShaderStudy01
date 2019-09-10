@@ -21,6 +21,91 @@
 		return max(1.055h * pow(linRGB, 0.416666667h) - 0.055h, 0.h);
 	}
 	
+	//解压HDR贴图
+	//处理dLDR和RGBM格式
+	inline half3 DecodeLightmapRGBM(half4 data, decodeInstructions)
+	{
+		//如果不支持线性模式，我们可以跳过指数部分
+		#if defined(UNITY_COLORSPACE_GAMMA)
+			//RGBM 线性读取
+			#if defined(UNITY_FORCE_LINEAR_READ_FOR_RGBM)
+				return(decodeInstructions.x * data.a) * sqrt(data.rgb);
+			#else
+				return(decodeInstructions.x * data.a) * data.rgb;
+			#endif
+		#else
+			return(decodeInstructions.x * pow(data.a, decodeInstructions.y)) * data.rgb;
+		#endif
+	}
+	
+	//解码DoubleLDR
+	//DLDR即doubleLDR，双倍低动态 （色值乘二...）
+	inline half3 DecodeLightmapDoubleLDR(fixed4 color, half4 decodeInstructions)
+	{
+		//decodeInstructions.x在使用gamma颜色空间时包含2.0，或者在移动平台上使用线性颜色空间时包含pow(2.0,2.2)=4.59
+		return decodeInstructions.x * color.rgb;
+	}
+	
+	//lightmap 的 color.a 会被用于压缩   所以贴图格式的A 不能被使用
+	inline half3 DecodeLightmap(fixed4 color, half4 decodeInstructions)
+	{
+		//Lightmap解析:https://zhuanlan.zhihu.com/p/35096536
+		
+		#if defined(UNITY_LIGHTRMAP_DLDR_ENCODING)
+			return DecodeLightmapDoubleLDR(color, decodeInstructions);
+		#elif defined(UNITY_LIGHTMAP_RGBM_ENCODING)
+			//RGBM即 HDR的RGBM压缩格式
+			//RGBM编码pack [0,8]的范围为[0, 1]，乘数存储在alpha通道中。最终值为RGB * A * 8。
+			return DecodeLightmapRGBM(color, decodeInstructions);
+		#else //defined(UNITY_LIGHTMAP_FULL_HDR)
+			//当启用标准HDR的时直接返回颜色rgb不需要做额外处理
+			return color.rgb;
+		#endif
+	}
+	
+	//物体lightmap_hdr的颜色   通常用于解码lightmap
+	half4 unity_Lightmap_HDR;
+	
+	inline half3 DecodeLightmap(fixed4 color)
+	{
+		return DecodeLightmap(color, unity_Lightmap_HDR);
+	}
+	
+	
+	half4 unity_DynamicLightmap_HDR;
+	
+	/*
+	解码Enlighten RGBM编码的lightmap
+	注意：Enlighten动态纹理RGBM格式与标准Unity HDR纹理不同
+	（例如烘焙的光照贴图、反射探测器和IBL图像）
+	相反,在具有不同指数的线性颜色空间中,Enlighten提供了rgbm纹理。
+	警告：3次POW操作，对手机来说可能非常昂贵！
+	*/
+	inline half3 DecodeRealtimeLightmap(fixed4 color)
+	{
+		//跟这个 DecodeLightmapRGBM()  方法差不多
+		//这是暂时的，直到Geomerics给我们一个api，在上传纹理之前，在Enlighten线程上的gamma空间将光照贴图转换为rgbm。
+		#if defined(UNITY_FORCE_LINEAR_READ_FOR_RGBM)
+			return pow((unity_DynamicLightmap_HDR.x * color.a) * sqrt(color.rgb), unity_DynamicLightmap_HDR.y);
+		#else
+			return pow((unity_DynamicLightmap_HDR.x * color.a) * color.rgb, unity_DynamicLightmap_HDR.y);
+		#endif
+	}
+	
+	inline half3 DecodeDirectionalLightmap(half3 color, fixed4 dirTex, half3 normalWorld)
+	{
+		/*
+		在定向（非镜面）模式中，照亮烘焙主光方向
+		在某种程度上，用它来表示半兰伯特，然后除以“再平衡系数”
+		给出的结果接近于纯漫反射响应光照贴图，但为法线贴图。
+		注意，dir不是有意的单位长度。它的长度是“方向性”，就像用于定向高光照贴图。
+		*/
+		//dirTex.xyz  -> [0,1] - 0.5 -> [-0.5,0.5]   ==  0.5 * [-1,1] 就跟半兰伯特一样
+		half halfLambert = dot(normalWorld, dirTex.xyz - 0.5) + 0.5;
+		
+		return col * halfLambert / max(1e-4h, dirTex.w);
+	}
+	
 	
 	//一级球谐    normal应该被归一化 并且W=1.0
 	//线性+常量多项式
@@ -67,6 +152,49 @@
 		
 		return res;
 	}
+	
+	#if UNITY_LIGHT_PROBE_PROXY_VOLUME
+		
+		//normal应该被标准化 w=1.0
+		half3 SHEvalLinearL0L1_SampleProbeVolume(half4 normal, float3 worldPos)
+		{
+			const float transformToLocal = unity_ProbeVolumeParams.y;
+			const float texelSizeX = unity_ProbeVolumeParams.z;
+			
+			//sh系数纹理和探针遮挡被打包到1个图集中。
+			//—————————————————————
+			//| SHR|SHG|SHB|遮挡系数|
+			//—————————————————————
+			
+			float3 position = (transformToLocal == 1.0f)?mul(unity_ProbeVolumeWorldToObject, float4(worldPos, 1.0)).xyz: worldPos;
+			float3 texCoord = (position - unity_ProbeVolumeMin.xyz) * unity_ProbeVolumeSizeInv.xyz;
+			texCoord.x = texCoord.x * 0.25f;//因为是4X4
+			
+			//我们需要计算适当的x坐标来采样。
+			//夹住坐标，否则rgb系数之间会有泄漏
+			float texCoordX = clamp(texCoord.x, 0.5f * texelSizeX, 0.25f - 0.5f * texelSizeX);
+			
+			//采样器状态来自SHR(所有SH纹理共享同一采样器)
+			//UNITY_SAMPLE_TEX3D_SAMPLER -> tex3D
+			texCoord.x = texCoordX;
+			half4 SHAr = UNITY_SAMPLE_TEX3D_SAMPLER(unity_ProbeVolumeSH, unity_ProbeVolumeSH, texCoord);
+			
+			texCoord.x = texCoordX + 0.25f;
+			half4 SHAg = UNITY_SAMPLE_TEX3D_SAMPLER(unity_ProbeVolumeSH, unity_ProbeVolumeSH, texCoord);
+			
+			texCoord.x = texCoordX + 0.5f;
+			half4 SHAb = UNITY_SAMPLE_TEX3D_SAMPLER(unity_ProbeVolumeSH, unity_ProbeVolumeSH, texCoord);
+			
+			//线性+常数多项式项
+			half3 x1;
+			x1.r = dot(SHAr, normal);
+			x1.g = dot(SHAg, normal);
+			x1.b = dot(SHAb, normal);
+			
+			return x1;
+		}
+		
+	#endif
 	
 	// 用于ForwardBase过程:计算四个点光源的漫反射照明,数据以特殊方式打包
 	float3 Shade4PointLights(
