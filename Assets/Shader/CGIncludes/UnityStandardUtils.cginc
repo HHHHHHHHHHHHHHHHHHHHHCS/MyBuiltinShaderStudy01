@@ -2,7 +2,7 @@
 	#define UNITY_STANDARD_UTILS_INCLUDED
 	
 	#include "CGIncludes/UnityCG.cginc"
-	#include "UnityStandardConfig.cginc"
+	#include "CGIncludes/UnityStandardConfig.cginc"
 	
 	//和白色进行Lerp
 	half3 LerpWhiteTo(half3 b, half t)
@@ -178,6 +178,41 @@
 			normal.z = sqrt(1.0 - saturate(dot(normal.xy, normal.xy)));
 			return normal;
 		#endif
+	}
+	
+	//-------------------------------------------------------------------------------------
+	//光照探针角度矫正
+	inline float3 BoxProjectedCubemapDirection(float3 worldRefl, float3 worldPos, float4 cubemapCenter, float4 boxMin, float4 boxMax)
+	{
+		//而且有有效的反射探针
+		
+		UNITY_BRANCH
+		//齐次坐标w必须是正的
+		if (cubemapCenter.w > 0.0)
+		{
+			float3 nrdir = normalize(worldRefl);
+			
+			#if 1
+				float3 rbmax = (boxMax.xyz - worldPos) / nrdir;
+				float3 rbmin = (boxMin.xyz - worldPos) / nrdir;
+				
+				float3 rbminmax = (nrdir > 0.0f)?rbmax: rbmin;
+			#else //优化版本
+				float3 rbmax = (boxMax.xyz - worldPos);
+				float3 rbmin = (boxMin.xyz - worldPos);
+				
+				float3 select = step(float3(0, 0, 0), nrdir);
+				float3 rbminmax = lerp(rbmax, rbmin, select);
+				rbminmax /= nrdir;
+			#endif
+			
+			float fa = min(min(rbminmax.x, rbminmax.y), rbminmax.z);
+			
+			worldPos -= cubemapCenter.xyz;
+			worldRefl = worldPos + nrdir * fa;
+		}
+
+		return worldRefl;
 	}
 	
 	half3 UnpackScaleNormal(half4 packednormal, half bumpScale)

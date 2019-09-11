@@ -126,6 +126,7 @@
 		return o_gi;
 	}
 	
+	//用于获取环境反射
 	inline half3 UnityGI_IndirectSpecular(UnityGIInput data, half occlusion, Unity_GlossyEnvironmentData glossIn)
 	{
 		half3 specular;
@@ -136,18 +137,21 @@
 			glossIn.reflUVW = BoxProjectedCubemapDirection(originalReflUVW, data.worldPos, data.probePosition[0], data.boxMin[0], data.boxMax[0]);
 		#endif
 		
+		//光照反射度 关闭 
 		#ifdef _GLOSSYREFLECTIONS_OFF
 			specular = unity_IndirectSpecColor.rgb;
 		#else
+			//环境反射球的颜色
 			half3 env0 = Unity_GlossyEnvironment(UNITY_PASS_TEXCUBE(unity_SpecCube0), data.probeHDR[0], glossIn);
 			#ifdef UNITY_SPECCUBE_BLENDING
 				const float kBlendFactor = 0.99999;
-				float blendLerp = data.boxMin[0].w;
+				float blendLerp = data.boxMin[0].w;//w是混合值
 				
 				//#define UNITY_BRANCH    [branch]
 				//正常GPU IF ELSE 为了指令计数器和并行效率两个分支都执行
 				//但是如果IF ELSE 里面的计算量过大 可以用宏 只执行一个
 				UNITY_BRANCH
+				//小于0.9999  则需要 反射球[1]
 				if (blendLerp < kBlendFactor)
 				{
 					#ifdef UNITY_SPECCUBE_BOX_PROJECTION

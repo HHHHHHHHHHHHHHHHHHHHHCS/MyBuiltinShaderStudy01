@@ -86,7 +86,7 @@
 	{
 		half3 albedo = _Color.rgb * tex2D(_MainTex, texcoords.xy).rgb;
 		#if _DETAIL
-			#if(SHADER_TARGET < 30)
+			#if (SHADER_TARGET < 30)
 				//SM2.0:因为指令计数器限制 所以没有细节mask
 				half mask = 1;
 			#else
@@ -160,5 +160,14 @@
 		}
 		
 	#endif
+	
+	half3 Emission(float2 uv)
+	{
+		#ifndef _EMISSION
+			return 0;
+		#else
+			return tex2D(_EmissionMap, uv).rgb * _EmissionColor.rgb;
+		#endif
+	}
 	
 #endif // UNITY_STANDARD_INPUT_INCLUDED

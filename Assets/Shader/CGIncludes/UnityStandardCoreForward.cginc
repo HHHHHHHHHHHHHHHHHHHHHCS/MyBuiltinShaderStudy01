@@ -5,7 +5,7 @@
 		#define UNITY_STANDARD_SIMPLE 1
 	#endif //UNITY_NO_FULL_STANDARD_SHADER
 	
-	#include "UnityStandardConfig.cginc"
+	#include "CGIncludes/UnityStandardConfig.cginc"
 	
 	#if UNITY_STANDARD_SIMPLE
 		//如果应使用具有额外简化的标准着色器BRDF3，则设置UNITY_NO_FULL_STANDARD_SHADER。
@@ -21,7 +21,7 @@
 			return vertForwardAddSimple(v);
 		}
 		*/
-
+		
 		half4 fragBase(VertexOutputBaseSimple i): SV_TARGET
 		{
 			return fragForwardBaseSimpleInternal(i);

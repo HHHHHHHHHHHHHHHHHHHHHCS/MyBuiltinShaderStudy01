@@ -30,13 +30,15 @@
 		//UNITY_POSITION() -> HLSLSupport.cginc    #define UNITY_POSITION(pos) float4 pos : SV_POSITION
 		UNITY_POSITION(pos);//切线空间位置
 		float4 tex: TEXCOORD0;//UV
-		half4 eyeVec: TEXCOORD1; //xyz:世界空间视野角度    w:grazingTerm->光泽度
+		//xyz:世界空间视野角度
+		//w:grazingTerm->光泽度 =smooth + metallic or 直接使用贴图的值
+		half4 eyeVec: TEXCOORD1;
 		
 		half4 ambientOrLightmapUV: TEXCOORD2;//球谐颜色 或 Lightmap.xyzw=uv1.xy uv2.xy
 		//SHADOW_COORDS() -> AutoLigt.cginc    unityShadowCoord4 _ShadowCoord : TEXCOORD##idx1;
 		SHADOW_COORDS(3) //阴影位置
 		//UNITY_FOG_COORDS_PACKED() -> UnityCG.ginc    #define UNITY_FOG_COORDS_PACKED(idx, vectype) vectype fogCoord : TEXCOORD##idx;
-		UNITY_FOG_COORDS_PACKED(4, half4) //x:fog的UV  yzw:反射角度    x:fogCoord , yzw:reflectVec
+		UNITY_FOG_COORDS_PACKED(4, half4) //x:fog的UV  yzw:反射角度    x:fogCoord , yzw:reflect eye
 		
 		half4 normalWorld: TEXCOORD5;//xyz:世界空间normal w:fresnelTerm->菲尼尔用
 		
@@ -68,12 +70,41 @@
 		return SpecularStrength(_SpecColor.rgb);
 	}
 	
+	//smoothness + metallic or 贴图颜色
+	half PerVertexGrazubgTerm(VertexOutputBaseSimple i, FragmentCommonData s)
+	{
+		#if GLOSSMAP
+			return saturate(s.smoothness + (1 - s.oneMinusReflectivity));
+		#else
+			return i.eyeVec.w;
+		#endif
+	}
+	
+	//normalWorld的W存的是菲尼尔值
+	//计算方法是 Pow4(1 - saturate(dot(normalWorld, -eyeVec)))
+	half PerVertexFresnelTerm(VertexOutputBaseSimple i)
+	{
+		return i.normalWorld.w;
+	}
+	
+	//根据是否开启发现 使用选择用那个空间下的灯光方向
 	half3 LightDirForSpecular(VertexOutputBaseSimple i, UnityLight mainLight)
 	{
 		#if SPECULAR_HIGHLIGHTS && defined(_NORMALMAP)
 			return i.tangentSpaceLightDir;
 		#else
 			return mainLight.dir;
+		#endif
+	}
+
+	//平行光的计算
+	half3 BRDF3DirectSimple(half3 diffColor,half3 specColor,half smoothness,half rl)
+	{
+		//是否要计算高光
+		#if SPECULAR_HIGHLIGHTS
+			return BRDF3_Direct(diffColor,specColor,Pow4(rl),smoothness);
+		#else
+			return diffColor;
 		#endif
 	}
 	
@@ -172,13 +203,14 @@
 		
 		o.ambientOrLightmapUV = VertexGIForward(v, posWorld, normalWorld);
 		
+		o.fogCoord.yzw = reflect(eyeVec, normalWorld);
+		
 		o.normalWorld.w = Pow4(1 - saturate(dot(normalWorld, -eyeVec)));//菲尼尔用
 		#if !GLOSSMAP
 			//UNIFORM_REFLECTIVITY() = MetallicSetup_Reflectivity()
 			o.eyeVec.w = saturate(_Glossiness + UNIFORM_REFLECTIVITY());
 		#endif
 		
-		//TODO:雾还没有做
 		UNITY_TRANSFER_FOG(o, o.pos);
 		return o;
 	}
@@ -211,16 +243,21 @@
 		//dot(Refl(eyeView),lightDir)
 		half rl = dot(REFLECTVEC_FOR_SPECULAR(i, s), LightDirSpecular(i, mainLight));
 		
+		//计算GI和环境光
 		UnityGI gi = FragmentGI(s, occlusion, i.ambientOrLightmapUV, atten, mianLight);
+		//lightColor 衰减
 		half3 attenuatedLightColor = gi.light.color * ndotl;
 		
+		//间接光
 		half3 c = BRDF3_Indirect(s.diffColor, s.specColor, gi.indirect, PerVertexGrazingTerm(i, s), PerVertexFresnelTerm(i));
+		//叠加  平行高光 * 间接光衰减
 		c += BRDF3DirectSimple(s.diffColor, s.specColor, s.smoothness, rl) * attenuatedLightColor;
+		//自发光
 		c += Emission(i.tex.xy);
 		
 		UNITY_APPLY_FOG(i.fogCoord, c);
 		
-		return 0;
+		return OutputForward(half4(c, 1), s.alpha);
 	}
 	
 	

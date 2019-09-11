@@ -4,6 +4,7 @@
 	#include "CGIncludes/UnityInstancing.cginc"
 	#include "CGincludes/UnityShaderVariables.cginc"
 	
+	#define UNITY_OPAQUE_ALPHA(outputAlpha) outputAlpha = 1.0
 	
 	#ifdef UNITY_COLORSPACE_GAMMA
 		#define unity_ColorSpaceDouble fixed4(2.0, 2.0, 2.0, 2.0)
@@ -35,6 +36,25 @@
 			#endif
 		#else
 			return(decodeInstructions.x * pow(data.a, decodeInstructions.y)) * data.rgb;
+		#endif
+	}
+	
+	//解压HDR
+	inline half3 DecodeHDR(half4 data, half4 decodeinstructions)
+	{
+		half alpha = decodeInstructions.w * (data.a - 1.0) + 1.0;
+		
+		//gamma Color 则需要 alpha 解压
+		#if defined(UNITY_COLORSPACE_GAMMA)
+			return(decodeinstructions.x * alpha) * data.rgb;
+		#else //linear Color
+			//如果是普通的HDR 则无需怎么解压
+			#if defined(UNITY_USE_NATIVE_HDR)
+				return decodeinstructions.x * data.rgb;
+			#else
+				//否则就要pow
+				return(decodeInstructions.x * pow(alpha, decodeinstructions.y)) * data.rgb;
+			#endif
 		#endif
 	}
 	
@@ -258,7 +278,7 @@
 	{
 		float4 o = pos * 0.5f;
 		//x和y w 都是除以齐次缩放的 并且w已经乘以0.5过了
-		//_ProjectionParams.x 根据OPENGL和DX所以乘
+		//_ProjectionParams.x 根据OPENGL和DX 所以投影翻转
 		//故 (-1~1)/2+0.5
 		o.xy = float2(o.x, o.y * _ProjectionParams.x) + o.w;
 		//ZW 不需要变动
@@ -275,23 +295,6 @@
 		return o;
 	}
 	
-	#define UNITY_FOG_COORDS_PACKED(idx, vectype) vectype fogCoord: TEXCOORD##idx;
-	
-	
-	#if defined(FOG_LINEAR) || defined(FOG_EXP) || defined(FOG_EXP2)
-		#define UNITY_FOG_COORDS(idx) UNITY_FOG_COORDS_PACKED(idx, float1)
-			
-		#if (SHADER_TARGET < 30) || defined(SHADER_API_MOBILE)
-			// 手机 或 SM2.0: 计算每个顶点的雾因子
-			#define UNITY_TRANSFER_FOG(o, outpos) UNITY_CALC_FOG_FACTOR((outpos).z); o.fogCoord.x = unityFogFactor
-		#else
-			// 电脑/主机 并且 SM3.0 :计算每个顶点的雾距离和每个像素的雾因子  其实就是屏幕空间的深度
-			#define UNITY_TRANSFER_FOG(o, outpos) o.fogCoord.x = (outpos).z
-		#endif
-	#else
-		#define UNITY_TRANSFER_FOG(o, outpos)
-	#endif
-	
 	#ifdef LOD_FADE_CROSSFADE
 		sampler2D unity_DitherMask;//LOD Fade 遮罩贴图
 		
@@ -306,6 +309,97 @@
 		#define UNITY_APPLY_DITHER_CROSSFADE(vpos) UnityApplyDitherCrossFade(vpos)
 	#else
 		#define UNITY_APPLY_DITHER_CROSSFADE(vpos)
+	#endif
+	
+	// ------------------------------------------------------------------
+	// Fog helpers
+	// UNITY_PASS_PREPASSBASE -> 延迟渲染base pass(renders normals & specular exponent)
+	// UNITY_PASS_DEFERRED -> 延迟渲染G缓冲区
+	// UNITY_PASS_SHADOWCASTER -> 阴影渲染
+	// 如果不小心在延迟渲染要么阴影渲染中开启了,则关闭fog
+	#if defined(UNITY_PASS_PREPASSBASE) || defined(UNITY_PASS_DEFERRED) || defined(UNITY_PASS_SHADOWCASTER)
+		#undef FOG_LINEAR
+		#undef FOG_EXP
+		#undef FOG_EXP2
+	#endif
+	
+	#define UNITY_FOG_COORDS_PACKED(idx, vectype) vectype fogCoord: TEXCOORD##idx;
+	
+	#if defined(UNITY_REVERSED_Z)
+		//UNITY_Z_0_FAR_FROM_CLIPSPACE 是否需要翻转深度Z 之类的
+		#if UNITY_REVERSED_Z == 1
+			//D3d 翻转 Z => z Clip 范围 [near, 0] -> 重新映射 [0, far]
+			//在斜矩阵的情况下，max 可以帮助 我们不受 不正确的近平面 或者 没有意义 的影响
+			#define UNITY_Z_0_FAR_FROM_CLIPSPACE(coord) max(((1.0 - (coord) / _ProjectionParams.y) * _ProjectionParams.z), 0)
+		#else
+			//GL 翻转 Z => z Clip 范围 [near, -far] -> 在理论上应该重新映射，但在实践中不要这样做以节省一些性能（range足够接近）
+			#define UNITY_Z_0_FAR_FROM_CLIPSPACE(coord) max( - (coord), 0)
+		#endif
+	#else
+		//D3d 不用翻转 z => z Clip 范围 [0, far] -> 不用做
+		#define UNITY_Z_0_FAR_FROM_CLIPSPACE(coord) (coord)
+	#else
+		//Opengl  z Clip 范围 [-near, far] -> 在理论上应该重新映射，但在实践中不要这样做以节省一些性能（范围足够近）
+		#define UNITY_Z_0_FAR_FROM_CLIPSPACE(coord) (coord)
+	#endif
+	
+	/*
+	x = density / sqrt(ln(2)), by Exp2 mode
+	y = density / ln(2), by Exp mode
+	z = -1/(end-start), by Linear mode
+	w = end/(end-start), by Linear mode
+	*/
+	
+	#if defined(FOG_LINEAR)
+		//UNITY_CALC_FOG_FACTOR_RAW 计算FOG 因子
+		
+		// factor = (end-z)/(end-start) = z * (-1/(end-start)) + (end/(end-start))
+		#define UNITY_CALC_FOG_FACTOR_RAW(coord) float unityFogFactor = (coord) * unity_FogParams.z + unity_FogParams.w
+	#elif defined(FOG_EXP)
+		// factor = exp(-density*z)
+		#define UNITY_CALC_FOG_FACTOR_RAW(coord) float unityFogFactor = unity_FogParams.y * (coord); unityFogFactor = exp2(-unityFogFactor)
+	#elif defined(FOG_EXP2)
+		// factor = exp(-(density*z)^2)
+		#define UNITY_CALC_FOG_FACTOR_RAW(coord) float unityFogFactor = unity_FogParams.x * (coord); unityFogFactor = exp2(-unityFogFactor * unityFogFactor)
+	#else
+		#define UNITY_CALC_FOG_FACTOR_RAW(coord) float unityFogFactor = 0.0
+	#endif
+	
+	//计算Fog因子
+	#define UNITY_CALC_FOG_FACTOR(coord) UNITY_CALC_FOG_FACTOR_RAW(UNITY_Z_0_FAR_FROM_CLIPSPACE(coord))
+	
+	//Lerp Fog 颜色 根据Fog因子
+	#define UNITY_FOG_LERP_COLOR(col, fogCol, fogFac) col.rgb = lerp((fogCol).rgb, (col).rgb, saturate(fogFac))
+	
+	
+	#if defined(FOG_LINEAR) || defined(FOG_EXP) || defined(FOG_EXP2)
+		#define UNITY_FOG_COORDS(idx) UNITY_FOG_COORDS_PACKED(idx, float1)
+			
+		#if (SHADER_TARGET < 30) || defined(SHADER_API_MOBILE)
+			// 手机 或 SM2.0:
+			//顶点阶段计算 fog因子
+			#define UNITY_TRANSFER_FOG(o, outpos) UNITY_CALC_FOG_FACTOR((outpos).z); o.fogCoord.x = unityFogFactor
+			//因为在顶点阶段已经计算了因子  ,所以只用在像素阶段lerp颜色就好了
+			#define UNITY_APPLY_FOG_COLOR(coord, col, fogCol) UNITY_FOG_LERP_COLOR(col, fogCol, (coord).x)
+			
+		#else
+			// 电脑/主机 或 SM3.0 :
+			//顶点阶段只计算雾距离   其实就是屏幕空间的深度
+			#define UNITY_TRANSFER_FOG(o, outpos) o.fogCoord.x = (outpos).z
+			//在像素阶段计算 fog 因子 和 lerp颜色
+			#define UNITY_APPLY_FOG_COLOR(coord, col, fogCOl) UNITY_CALC_FOG_FACTOR((coord).x); UNITY_FOG_LERP_COLOR(col, fogCol, unityFogFactor)
+			
+		#endif
+	#else
+		#define UNITY_TRANSFER_FOG(o, outpos)
+		#define UNITY_APPLY_FOG_COLOR(coord, col, fogCol)
+	#endif
+	
+	
+	#ifdef UNITY_PASS_FORWARDADD
+		#define UNITY_APPLY_FOG(coord, col) UNITY_APPLY_FOG_COLOR(coord, col, fixed4(0, 0, 0, 0))
+	#else
+		#define UNITY_APPLY_FOG(coord, col) UNITY_APPLY_FOG_COLOR(coord, col, unity_FogColor)
 	#endif
 	
 #endif // UNITY_CG_INCLUDED

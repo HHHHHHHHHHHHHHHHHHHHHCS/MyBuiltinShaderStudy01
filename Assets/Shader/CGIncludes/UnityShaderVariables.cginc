@@ -47,10 +47,10 @@
 		float3 _WorldSpaceCameraPos;
 	#endif
 	
-	// x = 1 or -1 (-1 if projection is flipped)
-	// y = near plane
-	// z = far plane
-	// w = 1/far plane
+	// x = 1 or -1 (-1 如果投影被翻转了)
+	// y = NearClip
+	// z = FarClip
+	// w = 1/FarClip
 	float4 _ProjectionParams;
 	
 	// x = width
@@ -223,6 +223,7 @@
 	fixed4 unity_AmbientSky;
 	fixed4 unity_AmbientEquator;
 	fixed4 unity_AmbientGround;
+	//平行光的反射颜色
 	fixed4 unity_IndirectSpecColor;
 	
 	#if !defined(USING_STEREO_MATRICES)
@@ -242,10 +243,10 @@
 	
 	CBUFFER_START(UnityFog)
 	fixed4 unity_FogColor;
-	// x = density / sqrt(ln(2)), useful for Exp2 mode
-	// y = density / ln(2), useful for Exp mode
-	// z = -1/(end-start), useful for Linear mode
-	// w = end/(end-start), useful for Linear mode
+	// x = density / sqrt(ln(2)), by Exp2 mode
+	// y = density / ln(2), by Exp mode
+	// z = -1/(end-start), by Linear mode
+	// w = end/(end-start), by Linear mode
 	float4 unity_FogParams;
 	CBUFFER_END
 	

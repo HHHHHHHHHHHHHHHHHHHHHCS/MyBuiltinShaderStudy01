@@ -52,6 +52,17 @@
 		#define IN_WORLDPOS(i) half3(0, 0, 0)
 	#endif
 	
+	half4 OutputForward(half4 output, half alphaFormSurface)
+	{
+		//开启Alpha
+		#if defined(_ALPHABLEND_ON) || defined(_ALPHAPREMULTIPLY_ON)
+			output.a = alphaFormSurface;
+		#else //如果没有开启Alpha  则直接用 1
+			UNITY_OPAQUE_ALPHA(output.a);
+		#endif
+		return output;
+	}
+	
 	inline half4 VertexGIForward(VertexInput v, float3 posWorld, half3 normalWorld)
 	{
 		half4 ambientOrLightmapUV = 0;
@@ -150,12 +161,12 @@
 				g.reflUVW = s.reflUVW;
 			#endif
 			
-			//TODO:UnityGlobalIllumination
+			//有环境反射球 就计算环境反射球和GI
 			return UnityGlobalIllumination(d, occlusion, s.normalWorld, g);
 		}
 		else
 		{
-			//TODO:UnityGlobalIllumination
+			//否则直接就直接计算GI
 			return UnityGlobalIllumination(d, occlusion, s.normalWorld);
 		}
 	}
