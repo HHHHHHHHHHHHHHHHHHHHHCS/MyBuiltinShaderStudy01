@@ -17,14 +17,14 @@
 	{
 		half3 diffuse;
 		half3 specular;
-	}
+	};
 
 	//灯光结构体和反射结构体
 	struct UnityGI
 	{
 		UnityLight light;
 		UnityIndirect indirect;
-	}
+	};
 
 	struct UnityGIInput
 	{

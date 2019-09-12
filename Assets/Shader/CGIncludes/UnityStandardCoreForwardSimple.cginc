@@ -71,7 +71,7 @@
 	}
 	
 	//smoothness + metallic or 贴图颜色
-	half PerVertexGrazubgTerm(VertexOutputBaseSimple i, FragmentCommonData s)
+	half PerVertexGrazingTerm(VertexOutputBaseSimple i, FragmentCommonData s)
 	{
 		#if GLOSSMAP
 			return saturate(s.smoothness + (1 - s.oneMinusReflectivity));
@@ -96,13 +96,13 @@
 			return mainLight.dir;
 		#endif
 	}
-
+	
 	//平行光的计算
-	half3 BRDF3DirectSimple(half3 diffColor,half3 specColor,half smoothness,half rl)
+	half3 BRDF3DirectSimple(half3 diffColor, half3 specColor, half smoothness, half rl)
 	{
 		//是否要计算高光
 		#if SPECULAR_HIGHLIGHTS
-			return BRDF3_Direct(diffColor,specColor,Pow4(rl),smoothness);
+			return BRDF3_Direct(diffColor, specColor, Pow4(rl), smoothness);
 		#else
 			return diffColor;
 		#endif
@@ -236,20 +236,21 @@
 		//SHADOW_ATTENUATION 是阴影强度(衰减) 0代表全黑的   跟shadowMap 有关
 		half realtimeShadowAttenuation = SHADOW_ATTENUATION(i);
 		//根据实时的阴影和烘焙的阴影  算出要的阴影
-		half atten = UnityMixRealtimeAndBakedShadows(realtimeShadowAttenuation, shadowMsakAttenuation, 0);
+		half atten = UnityMixRealtimeAndBakedShadows(realtimeShadowAttenuation, shadowMaskAttenuation, 0);
 		
 		//遮罩
 		half occlusion = Occlusion(i.tex.xy);
 		//dot(Refl(eyeView),lightDir)
-		half rl = dot(REFLECTVEC_FOR_SPECULAR(i, s), LightDirSpecular(i, mainLight));
+		half rl = dot(REFLECTVEC_FOR_SPECULAR(i, s), LightDirForSpecular(i, mainLight));
 		
 		//计算GI和环境光
-		UnityGI gi = FragmentGI(s, occlusion, i.ambientOrLightmapUV, atten, mianLight);
+		UnityGI gi = FragmentGI(s, occlusion, i.ambientOrLightmapUV, atten, mainLight);
 		//lightColor 衰减
 		half3 attenuatedLightColor = gi.light.color * ndotl;
 		
+		half3 c = 0;
 		//间接光
-		half3 c = BRDF3_Indirect(s.diffColor, s.specColor, gi.indirect, PerVertexGrazingTerm(i, s), PerVertexFresnelTerm(i));
+		c += BRDF3_Indirect(s.diffColor, s.specColor, gi.indirect, PerVertexGrazingTerm(i, s), PerVertexFresnelTerm(i));
 		//叠加  平行高光 * 间接光衰减
 		c += BRDF3DirectSimple(s.diffColor, s.specColor, s.smoothness, rl) * attenuatedLightColor;
 		//自发光

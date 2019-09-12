@@ -68,7 +68,7 @@
 			float zDist = dot(_WorldSpaceCameraPos - data.worldPos, UNITY_MATRIX_V[2].xyz);
 			float fadeDist = UnityComputeShadowFadeDistance(data.worldPos, zDist);
 			//根据物体动静态 决定用realtimeAtten 还是 bakedAtten
-			data.atten = UnityMixRealTimeAndBakedShadows(data.atten, bakedAtten, UntiyComputeShadowFade(fadeDist));
+			data.atten = UnityMixRealtimeAndBakedShadows(data.atten, bakedAtten, UntiyComputeShadowFade(fadeDist));
 		#endif
 		
 		o_gi.light = data.light;
@@ -132,7 +132,7 @@
 		half3 specular;
 		
 		//cubeBox投影矫正
-		#ifdef UNITY_SPACECUBE_BOX_PROJECTION
+		#ifdef UNITY_SPECCUBE_BOX_PROJECTION
 			half3 originalReflUVW = glossIn.reflUVW;
 			glossIn.reflUVW = BoxProjectedCubemapDirection(originalReflUVW, data.worldPos, data.probePosition[0], data.boxMin[0], data.boxMax[0]);
 		#endif
@@ -155,10 +155,10 @@
 				if (blendLerp < kBlendFactor)
 				{
 					#ifdef UNITY_SPECCUBE_BOX_PROJECTION
-						glossIn.reflUVW = BOXProjectedCubemapDirection(originalReflUVW, data.worldPos, data.probePosition[1], data.boxMin[1], data.boxMax[1]);
+						glossIn.reflUVW = BoxProjectedCubemapDirection(originalReflUVW, data.worldPos, data.probePosition[1], data.boxMin[1], data.boxMax[1]);
 					#endif
 					
-					half3 env1 = Unity_GlossyEnvironment(UNITY_PASS_TEXCUBE_SAMPLER(unity_specCube1, unity_SpecCube0), data.probeHDR[1], glossIn);
+					half3 env1 = Unity_GlossyEnvironment(UNITY_PASS_TEXCUBE_SAMPLER(unity_SpecCube1, unity_SpecCube0), data.probeHDR[1], glossIn);
 					specular = lerp(env1, env0, blendLerp);
 				}
 				else

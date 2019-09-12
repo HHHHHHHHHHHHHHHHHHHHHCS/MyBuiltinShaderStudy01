@@ -130,7 +130,7 @@
 				ambient = LinearToGammaSpace(ambient);
 			#endif
 			
-		#else if (SHADER_TARGET < 30) || UNITY_STANDARD_SIMPLE
+		#elif (SHADER_TARGET < 30) || UNITY_STANDARD_SIMPLE
 			//完全逐顶点
 			//这里没什么事。从sh开始的环境光的gamma转换发生在顶点着色器中，请参见shadeshpervertex。
 		#else

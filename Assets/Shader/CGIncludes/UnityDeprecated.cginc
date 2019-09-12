@@ -27,4 +27,4 @@
 		return DotClamped(normal, lightDir);
 	}
 	
-#endif // INCLUDE_UNITY_IMAGE_BASED_LIGHTING_DEPRECATED
+#endif // INCLUDE_UNITY_STANDARD_BRDF_DEPRECATED

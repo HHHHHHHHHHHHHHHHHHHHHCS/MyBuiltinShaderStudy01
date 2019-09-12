@@ -3,6 +3,9 @@
 	
 	#include "CGIncludes/UnityLightingCommon.cginc"
 	
+	#define INCLUDE_UNITY_STANDARD_BRDF_DEPRECATED
+	#include "CGIncludes/UnityDeprecated.cginc"
+	#undef INCLUDE_UNITY_STANDARD_BRDF_DEPRECATED
 	
 	inline half Pow4(half x)
 	{
@@ -45,11 +48,11 @@
 	}
 	
 	//预存的BRDF 跟rougness 有关的预积分Lut图  采样结果是specular
-	sampler2D_flaot unity_NHxRoughness;
+	sampler2D_float unity_NHxRoughness;
 	half3 BRDF3_Direct(half3 diffColor, half3 specColor, half rlPow4, half smoothness)
 	{
 		half LUT_RANGE = 16.0;//必须跟 GeneratedTextures.cpp 中的 NHxRoughness() 方法的 范围想匹配
-
+		
 		#if defined(_SPECULARHIGHTS_OFF)
 			half specular = 0.0;
 		#else

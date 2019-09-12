@@ -150,7 +150,7 @@
 			d.probePosition[0] = unity_SpecCube0_ProbePosition;
 			d.boxMax[1] = unity_SpecCube1_BoxMax;
 			d.boxMin[1] = unity_SpecCube1_BoxMin;
-			d.probePosition[1] = unity_SpecCube1_ProbePostion;
+			d.probePosition[1] = unity_SpecCube1_ProbePosition;
 		#endif
 		
 		if (reflections)

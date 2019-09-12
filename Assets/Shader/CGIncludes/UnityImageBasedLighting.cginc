@@ -4,14 +4,6 @@
 	#include "CGIncludes/UnityCG.cginc"
 	#include "CGIncludes/UnityStandardBRDF.cginc"
 	
-	
-	// ----------------------------------------------------------------------------
-	// 包含了不推荐的函数
-	#define INCLUDE_UNITY_IMAGE_BASED_LIGHTING_DEPRECATED
-	#include "CGIncludes/UnityDeprecated.cginc"
-	#undef INCLUDE_UNITY_IMAGE_BASED_LIGHTING_DEPRECATED
-	// ----------------------------------------------------------------------------
-	
 	//glossyenvironment->将镜面照明与默认天空或反射探针集成的功能
 	struct Unity_GlossyEnvironmentData
 	{

@@ -14,6 +14,13 @@
 		#define unity_ColorSpaceDielectricSpec half4(0.04, 0.04, 0.04, 1.0 - 0.04) // standard dielectric reflectivity coef at incident angle (= 4%)
 	#endif
 	
+	//是否应进行SH（光探头/环境）计算？
+	//-当静态和动态光照贴图都可用时，不执行sh求值
+	//-当静态和动态光照贴图不可用时，始终执行sh求值
+	//-对于低层lod，静态光照图和来自光探头的实时gi可以结合在一起
+	//-不执行环境光的过程（附加、阴影投射等）也不应执行sh。
+	#define UNITY_SHOULD_SAMPLE_SH (defined(LIGHTPROBE_SH) && !defined(UNITY_PASS_FORWARDADD) && !defined(UNITY_PASS_PREPASSBASE) && !defined(UNITY_PASS_SHADOWCASTER) && !defined(UNITY_PASS_META))
+	
 	
 	//linear颜色转gamma
 	inline half3 LinearToGammaSpace(half3 linRGB)
@@ -24,7 +31,7 @@
 	
 	//解压HDR贴图
 	//处理dLDR和RGBM格式
-	inline half3 DecodeLightmapRGBM(half4 data, decodeInstructions)
+	inline half3 DecodeLightmapRGBM(half4 data, half4 decodeInstructions)
 	{
 		//如果不支持线性模式，我们可以跳过指数部分
 		#if defined(UNITY_COLORSPACE_GAMMA)
@@ -40,20 +47,20 @@
 	}
 	
 	//解压HDR
-	inline half3 DecodeHDR(half4 data, half4 decodeinstructions)
+	inline half3 DecodeHDR(half4 data, half4 decodeInstructions)
 	{
 		half alpha = decodeInstructions.w * (data.a - 1.0) + 1.0;
 		
 		//gamma Color 则需要 alpha 解压
 		#if defined(UNITY_COLORSPACE_GAMMA)
-			return(decodeinstructions.x * alpha) * data.rgb;
+			return(decodeInstructions.x * alpha) * data.rgb;
 		#else //linear Color
 			//如果是普通的HDR 则无需怎么解压
 			#if defined(UNITY_USE_NATIVE_HDR)
-				return decodeinstructions.x * data.rgb;
+				return decodeInstructions.x * data.rgb;
 			#else
 				//否则就要pow
-				return(decodeInstructions.x * pow(alpha, decodeinstructions.y)) * data.rgb;
+				return(decodeInstructions.x * pow(alpha, decodeInstructions.y)) * data.rgb;
 			#endif
 		#endif
 	}
@@ -123,7 +130,7 @@
 		//dirTex.xyz  -> [0,1] - 0.5 -> [-0.5,0.5]   ==  0.5 * [-1,1] 就跟半兰伯特一样
 		half halfLambert = dot(normalWorld, dirTex.xyz - 0.5) + 0.5;
 		
-		return col * halfLambert / max(1e-4h, dirTex.w);
+		return color * halfLambert / max(1e-4h, dirTex.w);
 	}
 	
 	
@@ -335,7 +342,7 @@
 			//GL 翻转 Z => z Clip 范围 [near, -far] -> 在理论上应该重新映射，但在实践中不要这样做以节省一些性能（range足够接近）
 			#define UNITY_Z_0_FAR_FROM_CLIPSPACE(coord) max( - (coord), 0)
 		#endif
-	#else
+	#elif UNITY_UV_STARTS_AT_TOP
 		//D3d 不用翻转 z => z Clip 范围 [0, far] -> 不用做
 		#define UNITY_Z_0_FAR_FROM_CLIPSPACE(coord) (coord)
 	#else

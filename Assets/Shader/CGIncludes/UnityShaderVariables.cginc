@@ -275,7 +275,9 @@
 	// ----------------------------------------------------------------------------
 	// Reflection Probes
 	
+	//samplerCube 反射球0
 	UNITY_DECLARE_TEXCUBE(unity_SpecCube0);
+	//samplerCube 反射球1 Blender用
 	UNITY_DECLARE_TEXCUBE_NOSAMPLER(unity_SpecCube1);
 	
 	//反射球的属性
