@@ -29,6 +29,20 @@
 		return max(1.055h * pow(linRGB, 0.416666667h) - 0.055h, 0.h);
 	}
 	
+	//gamma颜色转linear
+	inline half3 GammaToLinearSpace(half3 sRGB)
+	{
+		// 近似做法 from http://chilliant.blogspot.com.au/2012/08/srgb-approximations-for-hlsl.html?m=1
+		return sRGB * (sRGB * (sRGB * 0.305306011h + 0.682171111h) + 0.012522878h);
+	}
+	
+	
+	#define CREATE_BINORMAL float3 binormal = cross(normalize(v.normal), normalize(v.tangent.xyz)) * v.tangent.w
+	#define CREATE_ROTATION float3x3 rotation = float3x3(v.tangent.xyz, binormal, v.normal)
+	#define TANGENT_SPACE_ROTATION CREATE_BINORMAL; CREATE_ROTATION
+	
+	
+	
 	//解压HDR贴图
 	//处理dLDR和RGBM格式
 	inline half3 DecodeLightmapRGBM(half4 data, half4 decodeInstructions)
@@ -264,6 +278,12 @@
 	
 	#define TRANSFORM_TEX(tex, name) (tex.xy * name##_ST.xy + name##_ST.zw)
 	
+	//物体空间视野方向
+	inline float3 ObjSpaceViewDir(in float4 v)
+	{
+		float3 objSpaceCameraPos = mul(unity_WorldToObject, float4(_WorldSpaceCameraPos.xyz, 1)).xyz;
+		return objSpaceCameraPos - v.xyz;
+	}
 	
 	inline float3 UnityObjectToWorldDir(in float3 dir)
 	{

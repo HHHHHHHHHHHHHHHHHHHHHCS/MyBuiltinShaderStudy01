@@ -40,21 +40,23 @@
 			return vertForwardBase(v);
 		}
 		
+		/*
 		VertexOutputForwardAdd vertAdd(VertexInput v)
 		{
 			return vertForwardAdd(v);
 		}
-		
+		*/
 		half4 fragBase(VertexOutputForwardBase i): SV_TARGET
 		{
 			return fragForwardBaseInternal(i);
 		}
 		
+		/*
 		half4 fragAdd(VertexOutputForwardAdd i): SV_TARGET
 		{
 			return fragForwardAddInternal(i);
 		}
-		
+		*/
 	#endif //UNITY_STANDARD_SIMPLE
 	
 	

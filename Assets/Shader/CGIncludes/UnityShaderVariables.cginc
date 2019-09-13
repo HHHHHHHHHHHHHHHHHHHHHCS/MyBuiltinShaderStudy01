@@ -172,7 +172,7 @@
 	float4x4 unity_ObjectToWorld;
 	float4x4 unity_WorldToObject;
 	float4 unity_LODFade; //x是在[0,1]范围内的淡入度值。y是x量化成16个能级
-	float4 unity_WorldTransformParams; // w is usually 1.0, or -1.0 for odd-negative scale transforms
+	float4 unity_WorldTransformParams; // w 通常是 1 或者 -1 因为 负尺寸 变换
 	float4 unity_RenderingLayer;
 	CBUFFER_END
 	

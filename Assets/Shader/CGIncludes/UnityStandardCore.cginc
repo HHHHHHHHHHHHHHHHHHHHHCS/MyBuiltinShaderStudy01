@@ -42,6 +42,18 @@
 		return l;
 	}
 	
+	half3 NormalizePerVertexNormal(float3 n)
+	{
+		//如果SM2.0 或者 想要优化计算
+		//则在顶点阶段 直接normalize
+		//否则在像素阶段 normalize
+		#if (SHADER_TARGET < 30) || UNITY_STANDARD_SIMPLE
+			return normalize(n);
+		#else
+			return n;
+		#endif
+	}
+	
 	#if UNITY_REQUIRE_FRAG_WORLDPOS
 		#if UNITY_PACK_WORLDPOS_WITH_TANGENT
 			#define IN_WORLDPOS(i) half3(i.tangentToWorldAndPackedData[0].w, i.tangentToWorldAndPackedData[1].w, i.tangentToWorldAndPackedData[2].w)
@@ -174,6 +186,71 @@
 	inline UnityGI FragmentGI(FragmentCommonData s, half occlusion, half4 i_ambientOrLightmapUV, half atten, UnityLight light)
 	{
 		return FragmentGI(s, occlusion, i_ambientOrLightmapUV, atten, light, true);
+	}
+	
+	VertexOutputForwardBase vertForwardBase(VertexInput v)
+	{
+		UNITY_SETUP_INSTANCE_ID(v);
+		VertexOutputForwardBase o;
+		UNITY_INITIALIZE_OUTPUT(VertexOutputForwardBase, o);
+		UNITY_TRANSFER_INSTANCE_ID(v, o);
+		
+		float4 posWorld = mul(unity_ObjectToWorld, v.vertex);
+		#if UNITY_REQUIRE_FRAG_WORLDPOS
+			#if UNITY_PACK_WORLD_WITH_TANGENT
+				o.tangentToWorldAndPackedData[0].w = posWorld.x;
+				o.tangentToWorldAndPackedData[1].w = posWorld.y;
+				o.tangentToWorldAndPackedData[2].w = posWorld.z;
+			#else
+				o.posWorld = posWorld.xyz;
+			#endif
+		#endif
+		
+		//虽然也可以用 UnityObjectToClipPos() ->  mul(UNITY_MATRIX_VP, mul(unity_ObjectToWorld, float4(pos, 1.0)))
+		o.pos = mul(UNITY_MATRIX_VP, posWorld);
+		
+		o.tex = TexCoords(v);
+		o.eyeVec.xyz = NormalizePerVertexNormal(posWorld.xyz - _WorldSpaceCameraPos);
+		float3 normalWorld = UnityObjectToWorldNormal(v.normal);
+		
+		#ifdef _TANGENT_TO_WORLD
+			float4 tangentWorld = float4(UnityObjectToWorldDir(v.tangent.xyz), v.tanget.w);
+			
+			float3x3 tangentToWorld = CreateTangentToWorldPerVertex(normalWorld, tangentWorld.xyz, tangentWorld.w);
+			o.tangentToWorldAndPackedData[0].xyz = tangentToWorld[0];
+			o.tangentToWorldAndPackedData[1].xyz = tangentToWorld[1];
+			o.tangentToWorldAndPackedData[2].xyz = tangentToWorld[2];
+		#else
+			o.tangentToWorldAndPackedData[0].xyz = 0;
+			o.tangentToWorldAndPackedData[1].xyz = 0;
+			o.tangetnToWorldAndPackedData[2].xyz = normalWorld;
+		#endif
+		
+		o.ambientOrLightmapUV = 0;
+		
+		#ifdef LIGHTMAP_ON
+			o.ambientOrLightmapUV.xy = v.uv1.xy * unity_LightmapST.xy + unity_LightmpaST.zw;
+		#endif
+		
+		#ifdef DYNAMICLIGHTMAP_ON
+			o.ambientOrLightmapUV.zw = v.uv2.xy * unity_DynamicLightmapST.xy + unity_DynamicLightmapST.zw;
+		#endif
+		
+		#if UNITY_SHOULD_SAMPLE_SH
+			o.ambientOrLightmapUV.rgb = ShadeSHPerVertex(normalWorld, o.ambientOrLightmapUV.rgb);
+		#endif
+		
+		
+		
+		#ifdef _PARALLAXMAP
+			TANGENT_SPACE_ROTATION;
+			half3 viewDirForParallax = mul(rotation, ObjSpaceViewDir(v.vertex));
+			o.tangentToWorldAndPackedData[0].w = viewDirForParallax.x;
+			o.tangentToWorldAndPackedData[1].w = viewDirForParallax.y;
+			o.tangentToWorldAndPackedData[2].w = viewDirForParallax.z;
+		#endif
+		
+		return o;
 	}
 	
 #endif // UNITY_STANDARD_CORE_INCLUDED
