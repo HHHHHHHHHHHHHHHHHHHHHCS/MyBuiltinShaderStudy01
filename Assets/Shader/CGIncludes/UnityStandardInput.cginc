@@ -177,8 +177,8 @@
 			return texcoord;
 		#else
 			half h = tex2D(_ParallaxMap, texcoords.xy).g;
-			//TODO:
 			float2 offset = ParallaxOffset1Step(h, _Parallax, viewDir);
+			//视差贴图UV偏移
 			return float4(texcoords.xy + offset, texcoords.zw + offset);
 		#endif
 	}

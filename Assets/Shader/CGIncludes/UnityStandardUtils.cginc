@@ -81,6 +81,20 @@
 		return diffColor;
 	}
 	
+	
+
+	//与Unity CG中的视差偏移相同，除了：
+	//*）精度-一半而不是浮点
+	half2 ParallaxOffset1Step(half h, half height, half3 viewDir)
+	{
+		//look like hight*(h-0.5)  -> h属于[0,1] 再 -0.5 = [-0.5,0.5]
+		h = h * height - height / 2.0;
+		half3 v = normalize(viewDir);
+		//视差的bump的偏移值。也可以自定义一个slider的区间，往shader里面传这个值
+		v.z += 0.42;
+		return h * (v.xy / v.z);
+	}
+	
 	//计算球谐光----顶点状态
 	half3 ShadeSHPerVertex(half3 normal, half3 ambient)
 	{
@@ -211,7 +225,7 @@
 			worldPos -= cubemapCenter.xyz;
 			worldRefl = worldPos + nrdir * fa;
 		}
-
+		
 		return worldRefl;
 	}
 	
@@ -224,12 +238,12 @@
 	{
 		return normalize(half3(n1.xy + n2.xy, n1.z * n2.z));
 	}
-
-	half3x3 CreateTangentToWorldPerVertex(half3 normal,half3 tangent,half tangentSign)
+	
+	half3x3 CreateTangentToWorldPerVertex(half3 normal, half3 tangent, half tangentSign)
 	{
 		half sign = tangentSign * unity_WorldTransformParams.w;
-		half3 binormal = cross(normal,tangent)*sign;
-		return half3x3(tangent,binormal,normal);
+		half3 binormal = cross(normal, tangent) * sign;
+		return half3x3(tangent, binormal, normal);
 	}
 	
 #endif // UNITY_STANDARD_UTILS_INCLUDED

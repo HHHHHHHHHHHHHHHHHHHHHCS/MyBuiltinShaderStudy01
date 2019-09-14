@@ -137,6 +137,7 @@
 		#endif
 		
 		FragmentCommonData o = UNITY_SETUP_BRDF_INPUT(i_tex);
+		//TODO:
 		o.normalWorld = PerPixelWorldNormal(i_tex, tangentWorld);
 		o.eyeVec = NormalizePerPixelNormal(i_eyeVec);
 		o.posWorld = i_posWorld;
