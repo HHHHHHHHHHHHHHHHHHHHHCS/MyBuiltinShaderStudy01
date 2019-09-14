@@ -170,4 +170,17 @@
 		#endif
 	}
 	
+	//视差
+	float4 Parallax(float4 texcoords, half3 viewDir)
+	{
+		#if !defined(_PARALLAXMAP) || (SHADER_TARGET < 30)
+			return texcoord;
+		#else
+			half h = tex2D(_ParallaxMap, texcoords.xy).g;
+			//TODO:
+			float2 offset = ParallaxOffset1Step(h, _Parallax, viewDir);
+			return float4(texcoords.xy + offset, texcoords.zw + offset);
+		#endif
+	}
+	
 #endif // UNITY_STANDARD_INPUT_INCLUDED

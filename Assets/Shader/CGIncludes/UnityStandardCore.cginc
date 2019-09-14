@@ -126,6 +126,27 @@
 		return o;
 	}
 	
+	//视差转换UV 用于遮挡采样
+	inline FragmentCommonData FragmentSetup(inout float4 i_tex, float3 i_eyeVec, half3 i_viewDirForParallax, float4 tangentToWorld[3], float3 i_posWorld)
+	{
+		i_tex = Parallax(i_tex, i_viewDirForParallax);
+		
+		half alpha = Alpha(i_tex.xy);
+		#if defined(_ALPHATEST_ON)
+			clip(alpha - _Cutoff);
+		#endif
+		
+		FragmentCommonData o = UNITY_SETUP_BRDF_INPUT(i_tex);
+		o.normalWorld = PerPixelWorldNormal(i_tex, tangentWorld);
+		o.eyeVec = NormalizePerPixelNormal(i_eyeVec);
+		o.posWorld = i_posWorld;
+		
+		//注意：着色器依赖于预乘alpha混合(_SrcBlend=One, _DstBlend = OneMinusSrcAlpha)
+		o.diffColor = PreMultiplyAlpha(o.diffColor, alpha, o.oneMinusReflectivity, /*out*/ o.alpha);
+		
+		return o;
+	}
+	
 	inline UnityGI FragmentGI(FragmentCommonData s, half occlusion, half4 i_ambientOrLightmapUV, half atten, UnityLight light, bool reflections)
 	{
 		UnityGIInput d;
@@ -251,6 +272,34 @@
 		#endif
 		
 		return o;
+	}
+	
+	half4 fragFowardBaseInternal(VertexOutputForwardBase i)
+	{
+		UNITY_APPLY_DITHER_CROSSFADE(i.pos.xy);
+		
+		FRAGMENT_SETUP(s)
+		
+		UNITY_SETUP_INSTANCE_ID(i);
+		UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(i);
+		
+		UnityLight mianLight = MainLight();
+		Unity_Light_ATTENUATION(atten, i, s.posWorld);
+		
+		half occlusion = Occlusion(i.tem.xy);
+		UnityGI gi = FragmentGI(s.occlusion, i.ambientOrLightmapUV, atten, mianLight);
+		
+		half4 c = UNITY_BRDF_PBS(s.diffColor, s.specColor, s.oneMinusReflectivity, s.smoothness, s.normalWorld, -s.eyeVec, gi.light, gi.indirect);
+		c.rgb += Emission(i.tex.xy);
+		
+		UNITY_EXTRACT_FOG_FROM_EYE_VEC(i);
+		UNITY_APPLY_FOG(_unity_fogCoord, c.rgb);
+		return OutputForward(c, s.alpha);
+	}
+	
+	half4 fragFowardBase(VertexOutputForwardBase i): SV_TARGET
+	{
+		return fragFowardBaseInternal(i);
 	}
 	
 #endif // UNITY_STANDARD_CORE_INCLUDED

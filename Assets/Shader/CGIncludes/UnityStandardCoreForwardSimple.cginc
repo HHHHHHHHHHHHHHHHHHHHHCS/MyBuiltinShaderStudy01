@@ -25,6 +25,8 @@
 		#define REFLECTVEC_FOR_SPECULAR(i, s) s.reflUVW
 	#endif
 	
+	#define FRAGMENT_SETUP(x) FragmentCommonData x = FragmentSetup(i.tex, i.eyeVec.xyz, IN_VIEWDIR4PARALLAX(i), i.tangentToWorldAndPackedData, IN_WORLDPOS(i));
+	
 	struct VertexOutputBaseSimple
 	{
 		//UNITY_POSITION() -> HLSLSupport.cginc    #define UNITY_POSITION(pos) float4 pos : SV_POSITION
