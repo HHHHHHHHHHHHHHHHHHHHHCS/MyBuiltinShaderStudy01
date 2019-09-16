@@ -12,6 +12,15 @@
 		#define UNITY_SETUP_BRDF_INPUT SpecularSetup
 	#endif
 	
+	#ifdef _PARALLAXMAP
+		#define IN_VIEWDIR4PARALLAX(i) NormalizePerPixelNormal(half3(i.tangentToWorldAndPackedData[0].w, i.tangentToWorldAndPackedData[1].w, i.tangentToWorldAndPackedData[2].w))
+	#else
+		#define IN_VIEWDIR4PARALLAX(i) half3(0, 0, 0)
+	#endif
+	
+	#define FRAGMENT_SETUP(x) FragmentCommonData x = FragmentSetup(i.tex, i.eyeVec.xyz, IN_VIEWDIR4PARALLAX(i), i.tangentToWorldAndPackedData, IN_WORLDPOS(i));
+	
+	
 	struct FragmentCommonData
 	{
 		half3 diffColor, specColor;
@@ -42,6 +51,9 @@
 		return l;
 	}
 	
+	//-------------------------------------------------------------------------------------
+	// 根据SM2.0或者是否要优化计算      决定在顶点阶段归一化 还是在像素阶段归一化
+	
 	half3 NormalizePerVertexNormal(float3 n)
 	{
 		//如果SM2.0 或者 想要优化计算
@@ -54,6 +66,15 @@
 		#endif
 	}
 	
+	float3 NormalizePerPixelNormal(float3 n)
+	{
+		#if(SHADER_TARGET < 30) || UNITY_STANDARD_SIMPLE
+			return n;
+		#else
+			return normalize(n);
+		#endif
+	}
+	
 	#if UNITY_REQUIRE_FRAG_WORLDPOS
 		#if UNITY_PACK_WORLDPOS_WITH_TANGENT
 			#define IN_WORLDPOS(i) half3(i.tangentToWorldAndPackedData[0].w, i.tangentToWorldAndPackedData[1].w, i.tangentToWorldAndPackedData[2].w)
@@ -63,6 +84,35 @@
 	#else
 		#define IN_WORLDPOS(i) half3(0, 0, 0)
 	#endif
+	
+	float3 PerPixelWorldNormal(float4 i_tex, float4 tangentToWorld[3])
+	{
+		#ifdef _NORMALMAP
+			half3 tangent = tangentToWorld[0].xyz;
+			half3 binormal = tangentToWorld[1].xyz;
+			half3 normal = tangentToWorld[2].xyz;
+			
+			//XNormal 法线校正
+			#if UNITY_TANGENT_ORTHONORMALIZE
+				normal = NormalizePerPixelNormal(normal);
+				
+				tangent = normalize(tangent - normal * dot(tangent, normal));
+				
+				half3 newB = cross(normal, tangent);
+				
+				binormal = newB * sign(dot(newB, binormal));
+			#endif
+			
+			//采样普通法线和细节法线贴图
+			half3 normalTangent = NormalInTangentSpace(i_tex);
+			//贴图混合现在的顶点的法线
+			float3 normalWorld = NormalizePerPixelNormal(tangent * normalTangent.x + binormal * normalTangent.y + normal * normalTangent.z);
+		#else
+			float3 normalWorld = normalize(tangentToWorld[2].xyz);
+		#endif
+		
+		return normalWorld;
+	}
 	
 	half4 OutputForward(half4 output, half alphaFormSurface)
 	{
@@ -127,8 +177,11 @@
 	}
 	
 	//视差转换UV 用于遮挡采样
+	//输出:视差处理后的UV  Normal  ViewDir  worldPos
+	//和 diffColor specColor oneMinusRefl  smoothness
 	inline FragmentCommonData FragmentSetup(inout float4 i_tex, float3 i_eyeVec, half3 i_viewDirForParallax, float4 tangentToWorld[3], float3 i_posWorld)
 	{
+		//视差根据ViewDir改变UV的位置
 		i_tex = Parallax(i_tex, i_viewDirForParallax);
 		
 		half alpha = Alpha(i_tex.xy);
@@ -137,8 +190,8 @@
 		#endif
 		
 		FragmentCommonData o = UNITY_SETUP_BRDF_INPUT(i_tex);
-		//TODO:
-		o.normalWorld = PerPixelWorldNormal(i_tex, tangentWorld);
+		
+		o.normalWorld = PerPixelWorldNormal(i_tex, tangentToWorld);
 		o.eyeVec = NormalizePerPixelNormal(i_eyeVec);
 		o.posWorld = i_posWorld;
 		
@@ -148,6 +201,7 @@
 		return o;
 	}
 	
+	//计算灯光的结构体
 	inline UnityGI FragmentGI(FragmentCommonData s, half occlusion, half4 i_ambientOrLightmapUV, half atten, UnityLight light, bool reflections)
 	{
 		UnityGIInput d;
@@ -279,17 +333,21 @@
 	{
 		UNITY_APPLY_DITHER_CROSSFADE(i.pos.xy);
 		
+		//输出:视差处理后的UV  Normal  ViewDir  worldPos
+		//和 diffColor specColor oneMinusRefl  smoothness
 		FRAGMENT_SETUP(s)
 		
 		UNITY_SETUP_INSTANCE_ID(i);
 		UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(i);
 		
 		UnityLight mianLight = MainLight();
-		Unity_Light_ATTENUATION(atten, i, s.posWorld);
-		
+		//获取阴影遮罩
+		UNITY_LIGHT_ATTENUATION(atten, i, s.posWorld);
 		half occlusion = Occlusion(i.tem.xy);
+		//计算灯光的结构体
 		UnityGI gi = FragmentGI(s.occlusion, i.ambientOrLightmapUV, atten, mianLight);
 		
+		//TODO:
 		half4 c = UNITY_BRDF_PBS(s.diffColor, s.specColor, s.oneMinusReflectivity, s.smoothness, s.normalWorld, -s.eyeVec, gi.light, gi.indirect);
 		c.rgb += Emission(i.tex.xy);
 		

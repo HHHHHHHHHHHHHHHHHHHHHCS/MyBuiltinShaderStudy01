@@ -174,7 +174,7 @@
 	float4 Parallax(float4 texcoords, half3 viewDir)
 	{
 		#if !defined(_PARALLAXMAP) || (SHADER_TARGET < 30)
-			return texcoord;
+			return texcoords;
 		#else
 			half h = tex2D(_ParallaxMap, texcoords.xy).g;
 			float2 offset = ParallaxOffset1Step(h, _Parallax, viewDir);

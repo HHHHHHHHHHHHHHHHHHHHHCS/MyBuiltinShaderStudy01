@@ -11,7 +11,8 @@
 		#define unity_ColorSpaceDielectricSpec half4(0.220916301, 0.220916301, 0.220916301, 1.0 - 0.220916301)
 	#else // Linear values
 		#define unity_ColorSpaceDouble fixed4(4.59479380, 4.59479380, 4.59479380, 2.0)
-		#define unity_ColorSpaceDielectricSpec half4(0.04, 0.04, 0.04, 1.0 - 0.04) // standard dielectric reflectivity coef at incident angle (= 4%)
+		//unity_ColorSpaceDielectricSpec里面存的是Unity选用的电介质反射率(= 4%),alpha通道是1-dielectricSpec
+		#define unity_ColorSpaceDielectricSpec half4(0.04, 0.04, 0.04, 1.0 - 0.04) 
 	#endif
 	
 	//是否应进行SH（光探头/环境）计算？
