@@ -347,7 +347,6 @@
 		//计算灯光的结构体
 		UnityGI gi = FragmentGI(s.occlusion, i.ambientOrLightmapUV, atten, mianLight);
 		
-		//TODO:
 		half4 c = UNITY_BRDF_PBS(s.diffColor, s.specColor, s.oneMinusReflectivity, s.smoothness, s.normalWorld, -s.eyeVec, gi.light, gi.indirect);
 		c.rgb += Emission(i.tex.xy);
 		
