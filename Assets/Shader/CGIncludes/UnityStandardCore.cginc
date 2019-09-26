@@ -263,7 +263,8 @@
 	{
 		return FragmentGI(s, occlusion, i_ambientOrLightmapUV, atten, light, true);
 	}
-	
+	/*
+	//TODO:
 	VertexOutputForwardBase vertForwardBase(VertexInput v)
 	{
 		UNITY_SETUP_INSTANCE_ID(v);
@@ -329,7 +330,7 @@
 		return o;
 	}
 	
-	half4 fragFowardBaseInternal(VertexOutputForwardBase i)
+	half4 fragForwardBaseInternal(VertexOutputForwardBase i)
 	{
 		UNITY_APPLY_DITHER_CROSSFADE(i.pos.xy);
 		
@@ -359,5 +360,5 @@
 	{
 		return fragFowardBaseInternal(i);
 	}
-	
+	*/
 #endif // UNITY_STANDARD_CORE_INCLUDED

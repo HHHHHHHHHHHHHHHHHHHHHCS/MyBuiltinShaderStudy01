@@ -257,8 +257,8 @@
 		c += Emission(i.tex.xy);
 		
 		UNITY_APPLY_FOG(i.fogCoord, c);
-		
-		return atten;//OutputForward(half4(c, 1), s.alpha);
+
+		return OutputForward(half4(c, 1), s.alpha);
 	}
 	
 	

@@ -68,7 +68,7 @@
 			#pragma target 3.0
 			
 			//这个宏是使用低效果,高性能的效果
-			//#define UNITY_NO_FULL_STANDARD_SHADER
+			#define UNITY_NO_FULL_STANDARD_SHADER
 			
 			#pragma shader_feature _NORMALMAP
 			//最多声明256个全局 其中一个技巧是使用 _   代表不用A和A
